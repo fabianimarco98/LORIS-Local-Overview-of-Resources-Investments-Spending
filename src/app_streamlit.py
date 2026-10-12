@@ -854,6 +854,7 @@ with tab_analytics:
         # Top 10 Payees / Destinatari
         top_p = active_stats.get("top_payees", pd.DataFrame())
         st.markdown(f"#### 🏷️ {t('top_payees', lang)}")
+        if not top_p.empty:
             p_cols = ["beneficiario", "totale_speso", "numero_transazioni"]
             avail_p = [c for c in p_cols if c in top_p.columns]
             top_p_view = top_p[avail_p].copy() if avail_p else top_p.copy()
