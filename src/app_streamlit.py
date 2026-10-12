@@ -562,11 +562,16 @@ with tab_overview:
             )
             df_acc_view["display_expenses"] = df_acc_view["tracked_expenses"].apply(lambda v: f"€ {v:,.2f}" if v > 0 else "-")
 
-            df_acc_view = df_acc_view[["institution", "account_id", "asset_class_label", "display_balance", "display_expenses", "tx_count"]]
-            if lang == "it":
-                df_acc_view.columns = ["Istituto", "Identificativo Conto", "Tipologia", "Saldo Patrimoniale", "Volume Spese", "Movimenti"]
-            else:
-                df_acc_view.columns = ["Institution", "Account ID", "Type", "Asset Balance", "Tracked Volume", "Transactions"]
+            acc_cols = ["institution", "account_id", "asset_class_label", "display_balance", "display_expenses", "tx_count"]
+            df_acc_view = df_acc_view[[c for c in acc_cols if c in df_acc_view.columns]]
+            df_acc_view = df_acc_view.rename(columns={
+                "institution": "Istituto" if lang == "it" else "Institution",
+                "account_id": "Identificativo Conto" if lang == "it" else "Account ID",
+                "asset_class_label": "Tipologia" if lang == "it" else "Type",
+                "display_balance": "Saldo Patrimoniale" if lang == "it" else "Asset Balance",
+                "display_expenses": "Volume Spese" if lang == "it" else "Tracked Volume",
+                "tx_count": "Movimenti" if lang == "it" else "Transactions",
+            })
 
             st.dataframe(
                 df_acc_view,
@@ -849,12 +854,14 @@ with tab_analytics:
         # Top 10 Payees / Destinatari
         top_p = active_stats.get("top_payees", pd.DataFrame())
         st.markdown(f"#### 🏷️ {t('top_payees', lang)}")
-        if not top_p.empty:
-            top_p_view = top_p.copy()
-            if lang == "en":
-                top_p_view.columns = ["Merchant / Payee", "Total Spent", "Transactions"]
-            else:
-                top_p_view.columns = ["Beneficiario / Negozio", "Totale Speso", "Transazioni"]
+            p_cols = ["beneficiario", "totale_speso", "numero_transazioni"]
+            avail_p = [c for c in p_cols if c in top_p.columns]
+            top_p_view = top_p[avail_p].copy() if avail_p else top_p.copy()
+            top_p_view = top_p_view.rename(columns={
+                "beneficiario": "Beneficiario / Negozio" if lang == "it" else "Merchant / Payee",
+                "totale_speso": "Totale Speso" if lang == "it" else "Total Spent",
+                "numero_transazioni": "Transazioni" if lang == "it" else "Transactions",
+            })
 
             amt_col_name = "Totale Speso" if lang == "it" else "Total Spent"
             st.dataframe(
@@ -872,11 +879,16 @@ with tab_analytics:
     st.caption(t("recurring_explanation", lang))
     df_rec_detected = bdm.detect_recurring_from_statements(df_tx_categorized)
     if not df_rec_detected.empty:
-        df_rec_view = df_rec_detected.copy()
-        if lang == "it":
-            df_rec_view.columns = ["Voce / Categoria", "Costo Minimo (€)", "Costo Massimo (€)", "Probabilità", "Inflazione"]
-        else:
-            df_rec_view.columns = ["Expense Item", "Min Cost (€)", "Max Cost (€)", "Probability", "Inflation Model"]
+        r_cols = ["name", "min_cost", "max_cost", "probability", "inflation_type"]
+        avail_r = [c for c in r_cols if c in df_rec_detected.columns]
+        df_rec_view = df_rec_detected[avail_r].copy() if avail_r else df_rec_detected.copy()
+        df_rec_view = df_rec_view.rename(columns={
+            "name": "Voce / Categoria" if lang == "it" else "Expense Item",
+            "min_cost": "Costo Minimo (€)" if lang == "it" else "Min Cost (€)",
+            "max_cost": "Costo Massimo (€)" if lang == "it" else "Max Cost (€)",
+            "probability": "Probabilità" if lang == "it" else "Probability",
+            "inflation_type": "Inflazione" if lang == "it" else "Inflation Model",
+        })
         st.dataframe(df_rec_view, use_container_width=True, hide_index=True)
     else:
         st.info("Nessuna spesa ricorrente isolata dai movimenti." if lang == "it" else "No recurring expenses detected yet.")
@@ -1072,15 +1084,24 @@ with tab_statements:
             st.markdown("---")
             st.markdown(f"### 🔄 {t('internal_transfers_table', lang)}")
             st.caption(t("internal_transfers_desc", lang))
-            df_tr_view = summary.internal_transfers.copy()
-            df_tr_view["date"] = pd.to_datetime(df_tr_view["date"]).dt.strftime("%d/%m/%Y")
-            if lang == "it":
-                df_tr_view.columns = ["Data", "Conto Origine", "Conto Destinazione", "Importo (€)", "Causale Uscita", "Causale Entrata"]
-            else:
-                df_tr_view.columns = ["Date", "From Account", "To Account", "Amount (€)", "Outflow Memo", "Inflow Memo"]
+            target_cols = ["date", "from_account", "to_account", "amount", "from_desc", "to_desc"]
+            avail_cols = [c for c in target_cols if c in summary.internal_transfers.columns]
+            df_tr_view = summary.internal_transfers[avail_cols].copy()
+            if "date" in df_tr_view.columns:
+                df_tr_view["date"] = pd.to_datetime(df_tr_view["date"]).dt.strftime("%d/%m/%Y")
+            rename_map = {
+                "date": "Data" if lang == "it" else "Date",
+                "from_account": "Conto Origine" if lang == "it" else "From Account",
+                "to_account": "Conto Destinazione" if lang == "it" else "To Account",
+                "amount": "Importo (€)" if lang == "it" else "Amount (€)",
+                "from_desc": "Causale Uscita" if lang == "it" else "Outflow Memo",
+                "to_desc": "Causale Entrata" if lang == "it" else "Inflow Memo",
+            }
+            df_tr_view = df_tr_view.rename(columns=rename_map)
+            amt_col_header = "Importo (€)" if lang == "it" else "Amount (€)"
             st.dataframe(
                 df_tr_view,
-                column_config={("Importo (€)" if lang == "it" else "Amount (€)"): st.column_config.NumberColumn(format="€ %.2f")},
+                column_config={amt_col_header: st.column_config.NumberColumn(format="€ %.2f")},
                 use_container_width=True,
                 hide_index=True,
             )

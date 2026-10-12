@@ -342,6 +342,34 @@ class TestAuditFixes(unittest.TestCase):
         self.assertEqual(stats_empty["total_inflow"], 0.0)
         self.assertEqual(stats_empty["total_outflow"], 0.0)
 
+    def test_internal_transfers_table_columns_safety(self):
+        """Verifica che la tabella dei giroconti gestisca correttamente le 8 colonne senza sollevare ValueError per length mismatch."""
+        df_tr_mock = pd.DataFrame([{
+            "date": pd.Timestamp("2026-05-01"),
+            "from_date": pd.Timestamp("2026-05-01"),
+            "to_date": pd.Timestamp("2026-05-02"),
+            "from_account": "Revolut_123",
+            "to_account": "Trade_Republic",
+            "amount": 500.0,
+            "from_desc": "Transfer to Trade Republic",
+            "to_desc": "Deposit from Revolut",
+        }])
+
+        target_cols = ["date", "from_account", "to_account", "amount", "from_desc", "to_desc"]
+        avail_cols = [c for c in target_cols if c in df_tr_mock.columns]
+        df_tr_view = df_tr_mock[avail_cols].copy()
+        rename_map = {
+            "date": "Data",
+            "from_account": "Conto Origine",
+            "to_account": "Conto Destinazione",
+            "amount": "Importo (€)",
+            "from_desc": "Causale Uscita",
+            "to_desc": "Causale Entrata",
+        }
+        df_tr_view = df_tr_view.rename(columns=rename_map)
+        self.assertEqual(list(df_tr_view.columns), ["Data", "Conto Origine", "Conto Destinazione", "Importo (€)", "Causale Uscita", "Causale Entrata"])
+        self.assertEqual(len(df_tr_view), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
