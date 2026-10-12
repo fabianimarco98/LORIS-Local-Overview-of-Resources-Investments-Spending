@@ -1,0 +1,7 @@
+# Template Portafoglio Investimenti & ETF per LORIS
+# Puoi inserire i tuoi ETF, azioni, o fondi esportati dal tuo broker o compilati a mano.
+# Campi supportati: Ticker, Name, Shares, Buy_Price, Current_Price, Market_Value
+Ticker,Name,Shares,Buy_Price,Current_Price,Market_Value,Asset_Class
+VWCE,Vanguard FTSE All-World UCITS ETF (Acc),25.0,105.20,123.40,3085.00,Equity ETF
+SWDA,iShares Core MSCI World UCITS ETF (Acc),15.0,82.50,96.80,1452.00,Equity ETF
+XEON,Xtrackers II EUR Overnight Rate Swap UCITS ETF,10.0,138.10,142.50,1425.00,Money Market ETF

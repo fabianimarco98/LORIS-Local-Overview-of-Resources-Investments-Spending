@@ -1,0 +1,68 @@
+# ============================================================
+# LORIS — .gitignore (Privacy & Open Source Protection)
+# ============================================================
+
+# Byte-compiled / optimized / Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# ============================================================
+# CRITICAL PRIVACY: ESTRATTI CONTO E DATI BANCARI PERSONALI
+# Nessun documento finanziario reale deve mai finire su GitHub!
+# ============================================================
+input/bank_statements/*
+!input/bank_statements/.gitkeep
+!input/bank_statements/README.md
+
+input/investments/*
+!input/investments/.gitkeep
+!input/investments/README.md
+!input/investments/template_*.csv
+
+input/wallet/*
+!input/wallet/.gitkeep
+!input/wallet/README.md
+
+input/user_overrides.json
+input/modifiche_utente.json
+
+# Output, log ed esportazioni personali
+output/
+logs/
+*.log
+*.tmp
+temp/
+
+# Bundle compilati e pacchetti di distribuzione
+LORIS.app/
+Applications/
+LORIS_Condividi.zip
+dist/
+build/
+*.egg-info/
+src/macos_app/LORIS
+src/macos_app/LORIS_bin
+src/macos_app/loris_cropped_test.png
+
+# File di sistema macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor & IDE
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,24 @@
+macro_category,category,min_cost,max_cost,probability,inflation_type
+casa e utenze,Affitto,600.0,600.0,1.0,yearly
+casa e utenze,"House (lavatrice, arredamento)",10.0,50.0,1.0,continuous
+casa e utenze,Bills + commissions,180.0,220.0,1.0,yearly
+crescita personale e salute,"Palestra, sport e integratori",29.9,39.9,1.0,yearly
+crescita personale e salute,Health,25.0,60.0,1.0,continuous
+crescita personale e salute,Università + istruzione,25.5,55.0,0.1,yearly
+shopping,Vestiti,70.0,150.0,0.25,yearly
+shopping,Parrucchiere,20.0,30.0,0.17,yearly
+shopping,Utilities,20.0,40.0,1.0,continuous
+shopping,Gift,40.0,60.0,1.0,yearly
+sussistenza,Spesa,230.0,260.0,1.0,continuous
+sussistenza,Macchinette/caffè/acqua,10.0,20.0,1.0,yearly
+sussistenza,Abbonamenti internet e telefono,50.0,60.0,1.0,yearly
+svago e socialità,Eating out,85.0,140.0,1.0,continuous
+svago e socialità,Drinking out,15.0,30.0,1.0,continuous
+svago e socialità,libri,15.0,20.0,0.33,yearly
+svago e socialità,Musei e cinema,26.0,40.0,1.0,yearly
+svago e socialità,Cazzate e scommesse,10.0,30.0,1.0,continuous
+svago e socialità,Entertainment,40.0,60.0,1.0,continuous
+svago e socialità,videogames,11.0,35.0,1.0,continuous
+trasporti,Trasporti,10.0,50.0,1.0,yearly
+trasporti,Benzina + autostrada + car,0.0,20.0,1.0,continuous
+viaggi e vacanze,aereo,150.0,200.0,0.33,continuous

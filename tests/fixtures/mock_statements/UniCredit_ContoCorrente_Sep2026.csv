@@ -1,0 +1,5 @@
+Data Operazione;Data Valuta;Causale;Descrizione;Entrate;Uscite;Saldo Contabile
+05/09/2026;05/09/2026;BONIFICO SEPA;Bonifico da Genitori donazione;20,00;;2020,00
+10/09/2026;10/09/2026;SDD ADDEBITO DIRETTO;Wiener Netze Gas Utenze;;36,00;1984,00
+10/09/2026;10/09/2026;SDD ADDEBITO DIRETTO;Wiener Netze Elettricità;;19,20;1964,80
+12/09/2026;12/09/2026;PAGAMENTO POS;Decathlon vestiti e giacca;;61,95;1902,85

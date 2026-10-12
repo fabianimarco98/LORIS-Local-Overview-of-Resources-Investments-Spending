@@ -1,0 +1,81 @@
+======================================================================
+  🐾 BENVENUTO IN LORIS — Local Overview of Resources, Investments & Spending
+======================================================================
+
+LORIS è un sistema di finanza personale offline, privato e riservato al 100%.
+Non richiede account, non usa server cloud e non invia alcun dato all'esterno.
+Funziona direttamente leggendo i tuoi estratti conto bancari (PDF, CSV o Excel).
+
+----------------------------------------------------------------------
+1. COME AVVIARE L'APPLICAZIONE (1-CLIC)
+----------------------------------------------------------------------
+• SU MAC (macOS):
+  Fai semplicemente DOPPIO CLIC sul file:
+  👉 start.command
+  (Se macOS ti chiede conferma al primo avvio, fai tasto destro -> Apri).
+  Al primo avvio configurerà automaticamente l'ambiente e aprirà la dashboard nel tuo browser!
+
+  In alternativa, puoi anche aprire il Terminale in questa cartella e digitare:
+  ./run_app.sh
+
+• SU WINDOWS:
+  Fai semplicemente DOPPIO CLIC sul file:
+  👉 start.bat
+  (Richiede Python 3.10+ installato con la spunta "Add Python to PATH").
+
+----------------------------------------------------------------------
+2. COME CARICARE I TUOI DATI BANCARI
+----------------------------------------------------------------------
+Hai due modi semplicissimi:
+A) DALL'INTERFACCIA WEB (Consigliato):
+   - Apri la barra laterale sinistra ("Carica Estratti Conto").
+   - Trascina i tuoi file bancari (PDF, CSV, Excel) nell'area di upload.
+   - LORIS riconosce automaticamente la tua banca, estrae le transazioni,
+     neutralizza i trasferimenti tra conti tuoi e calcola saldi e statistiche!
+
+B) DALLA CARTELLA DEL COMPUTER:
+   - Copia i tuoi file bancari direttamente nella cartella:
+     input/bank_statements/
+   - Se hai un portafoglio ETF o una lista titoli, copiala in:
+     input/investments/
+   - Se usi un'app per le spese come Wallet (BudgetBakers), copiala in:
+     input/wallet/ (oppure trascinala direttamente nell'interfaccia!)
+   - Clicca su "Ricarica Dati" nell'app.
+
+Banche e App supportate nativamente:
+Trade Republic (PDF e CSV), Revolut, Erste Bank / Sparkasse, Intesa Sanpaolo,
+UniCredit, Fineco, N26, Widiba, Poste Italiane, Scalable Capital, Degiro,
+Wallet App (BudgetBakers con tracciamento contanti CASH), e qualsiasi estratto generico.
+
+----------------------------------------------------------------------
+3. FUNZIONE UNDO & MODIFICHE MANUALI (MASSIMO CONTROLLO)
+----------------------------------------------------------------------
+• ANNULLA ULTIMO CARICAMENTO (UNDO):
+  Se carichi un file per errore, appare subito il pulsante "↩️ Annulla Ultimo Caricamento"
+  nella barra laterale e nella scheda delle transazioni. Con un clic il file viene rimosso
+  e lo stato precedente viene ripristinato!
+• ELIMINA FILE SINGOLI:
+  Nella barra laterale puoi cliccare 🗑️ accanto a qualsiasi file salvato su disco per rimuoverlo.
+• MODIFICA MANUALE SALDI:
+  Nella scheda "Patrimonio & Saldi", puoi aprire "✏️ Modifica Manuale Saldi dei Conti"
+  per correggere o impostare a mano il saldo esatto di qualsiasi conto e cliccare "Salva".
+• MODIFICA CATEGORIE & TRANSAZIONI:
+  Nella scheda "Estratti Conto & Transazioni", puoi modificare la categoria di una spesa,
+  contrassegnarla come giroconto o escluderla, oppure aggiungere nuovi movimenti manuali col tasto "+".
+
+----------------------------------------------------------------------
+4. CHAT CON L'AI LOCALE (OPZIONALE)
+----------------------------------------------------------------------
+LORIS include un motore di analisi finanziaria offline sempre attivo.
+Se vuoi anche chattare in linguaggio naturale con l'intelligenza artificiale locale:
+1. Installa Ollama (gratuito e open-source da https://ollama.com oppure `brew install ollama`)
+2. Apri il Terminale e scarica un modello leggero:
+   ollama run llama3.2
+3. LORIS si collegherà automaticamente in locale sulla porta 11434 con privacy totale!
+
+----------------------------------------------------------------------
+5. PRIVACY E SICUREZZA
+----------------------------------------------------------------------
+• I tuoi dati restano esclusivamente sul tuo computer.
+• Puoi usare LORIS anche completamente offline (senza connessione internet).
+======================================================================
