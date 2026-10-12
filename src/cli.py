@@ -128,9 +128,9 @@ def cmd_simulate(args):
         starting_cash = args.cash if args.cash is not None else summary.recommended_starting_cash
         starting_inv = args.inv if args.inv is not None else summary.total_investments
 
-    emp_salary = stats.get("detected_salary", 2000.0)
-    emp_burn_mean = stats.get("monthly_expenses_mean", 1300.0)
-    emp_burn_std = stats.get("monthly_expenses_std", 200.0)
+    emp_salary = stats.get("detected_salary", 0.0)
+    emp_burn_mean = stats.get("monthly_expenses_mean", 0.0)
+    emp_burn_std = stats.get("monthly_expenses_std", 0.0)
 
     print(f"Parametri di partenza:" if lang == "it" else "Initial Parameters:")
     print(f"  • {t('starting_cash', lang)}:        € {starting_cash:,.2f}")

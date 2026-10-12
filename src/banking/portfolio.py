@@ -233,7 +233,7 @@ class PortfolioAggregator:
         # 4. Burn rate e buffer di liquidità
         monthly_burn = self._compute_burn_rate(df_all_tx)
         total_cash_buffer = liquid_cash + high_yield
-        buffer_months = max(0.0, (total_cash_buffer / monthly_burn)) if monthly_burn > 0 else 99.0
+        buffer_months = max(0.0, (total_cash_buffer / monthly_burn)) if monthly_burn > 0 else 0.0
 
         # 5. Sintesi aggregata per Wallet / App Spese se presente
         has_wallet = len(wallet_meta_list) > 0 or (not df_all_tx.empty and "is_tracker" in df_all_tx.columns and df_all_tx["is_tracker"].any())
@@ -406,13 +406,13 @@ class PortfolioAggregator:
     def _compute_burn_rate(self, df_tx: pd.DataFrame) -> float:
         """Calcola la spesa media mensile reale (escludendo i giroconti interni)."""
         if df_tx.empty or "amount" not in df_tx.columns or "date" not in df_tx.columns:
-            return 1800.0  # Valore di default realistico per Vienna
+            return 0.0
 
         # Esclude transazioni segnate come giroconto con gestione robusta dei nulli
         is_internal = df_tx["is_internal_transfer"].fillna(False).astype(bool) if "is_internal_transfer" in df_tx.columns else pd.Series(False, index=df_tx.index)
         spese = df_tx[(df_tx["amount"] < 0) & (~is_internal)].copy()
         if spese.empty:
-            return 1800.0
+            return 0.0
 
         # Se abbiamo sia estratti bancari che tracker spese, privilegia i conti bancari per il buffer di cassa liquida
         is_tr = spese["is_tracker"].fillna(False).astype(bool) if "is_tracker" in spese.columns else pd.Series(False, index=spese.index)
@@ -424,7 +424,7 @@ class PortfolioAggregator:
         spese_m = target_spese.groupby("month")["amount"].sum().abs()
         if len(spese_m) > 0:
             return float(spese_m.mean())
-        return 1800.0
+        return 0.0
 
     def _reconcile_with_monefy(
         self,

@@ -502,9 +502,9 @@ with col_k3:
 with col_k4:
     st.metric(t("investments", lang), f"€ {summary.total_investments:,.2f}")
 with col_k5:
-    st.metric(t("avg_monthly_spending", lang), f"€ {summary.monthly_burn_rate:,.2f}")
+    st.metric(t("avg_monthly_spending", lang), f"€ {summary.monthly_burn_rate:,.2f}" if summary.monthly_burn_rate > 0 else "—")
 with col_k6:
-    st.metric(t("liquidity_buffer", lang), f"{summary.liquidity_buffer_months:.1f} " + ("Mesi" if lang == "it" else "Months"))
+    st.metric(t("liquidity_buffer", lang), (f"{summary.liquidity_buffer_months:.1f} " + ("Mesi" if lang == "it" else "Months")) if summary.monthly_burn_rate > 0 else "—")
 
 
 # ------------------------------------------------------------
@@ -704,6 +704,13 @@ with tab_analytics:
     # Ricalcola le statistiche in base alla vista selezionata
     active_stats = bdm.compute_bank_monthly_statistics(df_tx_categorized, filter_source=active_view)
 
+    if df_tx_categorized.empty:
+        st.info(
+            "ℹ️ **Nessuna transazione disponibile.** Carica i tuoi estratti conto dalla barra laterale sinistra per visualizzare l'analisi storica, i trend di spesa e il cash flow."
+            if lang == "it" else
+            "ℹ️ **No transactions available.** Upload your bank statements in the left sidebar to view historical analytics, spending trends, and cash flow."
+        )
+
     # KPI Retrospettivi
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
     with col_h1:
@@ -719,9 +726,11 @@ with tab_analytics:
     with col_h5:
         st.metric(t("tracked_period", lang), f"{active_stats.get('total_tracked_months', 0)} " + ("Mesi" if lang == "it" else "Months"))
     with col_h6:
-        st.metric(t("avg_monthly_spending", lang), f"€ {active_stats.get('monthly_expenses_mean', 0.0):,.2f}")
+        burn_val = active_stats.get('monthly_expenses_mean', 0.0)
+        st.metric(t("avg_monthly_spending", lang), f"€ {burn_val:,.2f}" if burn_val > 0 else "—")
     with col_h7:
-        st.metric(t("spending_std", lang), f"± € {active_stats.get('monthly_expenses_std', 0.0):,.2f}")
+        vol_val = active_stats.get('monthly_expenses_std', 0.0)
+        st.metric(t("spending_std", lang), f"± € {vol_val:,.2f}" if vol_val > 0 else "—")
     with col_h8:
         disc = active_stats.get("discretionary_split", {})
         st.metric("Spese Discrezionali" if lang == "it" else "Discretionary Ratio", f"{disc.get('ratio', 0.0):.1f}%")
@@ -1086,6 +1095,13 @@ with tab_sim:
     st.subheader(t("forecast_title", lang))
     st.markdown(t("forecast_subtitle", lang))
 
+    if len(statements) == 0:
+        st.info(
+            "💡 **Nessun estratto conto caricato.** Puoi inserire i parametri manualmente qui sotto per testare le simulazioni Monte Carlo, oppure caricare i tuoi file bancari per calibrare automaticamente entrate, uscite e volatilità."
+            if lang == "it" else
+            "💡 **No bank statements loaded.** You can enter your parameters manually below to test Monte Carlo projections, or upload your statements to auto-calibrate income, spending, and volatility."
+        )
+
     # Parametri configurabili alimentati empiricamente dai dati degli estratti conto
     with st.expander(f"⚙️ {t('sim_parameters', lang)}", expanded=True):
         col_p1, col_p2, col_p3 = st.columns(3)
@@ -1106,35 +1122,40 @@ with tab_sim:
             )
             starting_cash_val = st.number_input(
                 t("starting_cash", lang) + ":",
-                value=float(summary.recommended_starting_cash if summary.recommended_starting_cash > 0 else 3000.0),
-                step=500.0
+                value=float(summary.recommended_starting_cash),
+                step=500.0,
+                help=("Saldo di cassa rilevato dai conti correnti e conti deposito." if summary.recommended_starting_cash > 0 else "Nessun conto caricato: imposta la liquidità iniziale desiderata.") if lang == "it" else "Starting liquid cash"
             )
 
         with col_p2:
-            default_income = float(bank_stats.get("detected_salary", 2000.0))
+            default_income = float(bank_stats.get("detected_salary", 0.0))
             user_income = st.number_input(
                 t("expected_monthly_income", lang) + ":",
-                value=default_income if default_income > 0 else 2000.0,
-                step=100.0
+                value=default_income if default_income > 0 else 0.0,
+                step=100.0,
+                help=("Rilevato automaticamente dai tuoi accrediti stipendio." if default_income > 0 else "Nessun accredito rilevato: imposta l'entrata mensile stimata.") if lang == "it" else "Monthly income"
             )
-            default_burn = float(bank_stats.get("monthly_expenses_mean", 1300.0))
+            default_burn = float(bank_stats.get("monthly_expenses_mean", 0.0))
             user_burn = st.number_input(
                 t("monthly_burn_rate", lang) + ":",
-                value=default_burn if default_burn > 0 else 1300.0,
-                step=50.0
+                value=default_burn if default_burn > 0 else 0.0,
+                step=50.0,
+                help=("Media mensile reale calcolata dai tuoi estratti conto." if default_burn > 0 else "Nessuna spesa rilevata: imposta il burn rate mensile stimato.") if lang == "it" else "Monthly burn rate"
             )
-            default_vol = float(bank_stats.get("monthly_expenses_std", 200.0))
+            default_vol = float(bank_stats.get("monthly_expenses_std", 0.0))
             user_vol = st.number_input(
                 t("spending_volatility", lang) + ":",
-                value=default_vol if default_vol > 0 else 200.0,
-                step=25.0
+                value=default_vol if default_vol > 0 else 0.0,
+                step=25.0,
+                help=("Deviazione standard storica delle spese mensili." if default_vol > 0 else "Volatilità mensile stimata.") if lang == "it" else "Spending volatility"
             )
 
         with col_p3:
             starting_inv_val = st.number_input(
                 t("starting_investments", lang) + ":",
-                value=float(summary.total_investments if summary.total_investments > 0 else 1000.0),
-                step=250.0
+                value=float(summary.total_investments),
+                step=250.0,
+                help=("Controvalore investimenti rilevato." if summary.total_investments > 0 else "Nessun conto titoli rilevato: imposta il controvalore investito iniziale.") if lang == "it" else "Starting investments"
             )
             user_pac = st.number_input(
                 t("monthly_pac", lang) + ":",

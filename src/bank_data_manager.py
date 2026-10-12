@@ -205,9 +205,9 @@ def compute_bank_monthly_statistics(
     """
     if df_tx.empty:
         return {
-            "monthly_expenses_mean": 1300.0,
-            "monthly_expenses_std": 200.0,
-            "detected_salary": 2000.0,
+            "monthly_expenses_mean": 0.0,
+            "monthly_expenses_std": 0.0,
+            "detected_salary": 0.0,
             "total_tracked_months": 0,
             "total_inflow": 0.0,
             "total_outflow": 0.0,
@@ -282,8 +282,8 @@ def compute_bank_monthly_statistics(
     net_savings = tot_inflow - tot_outflow
     avg_savings_rate = float((net_savings / tot_inflow * 100.0) if tot_inflow > 0 else 0.0)
 
-    mean_exp = float(monthly_deb.mean()) if not monthly_deb.empty else 1300.0
-    std_exp = float(monthly_deb.std()) if len(monthly_deb) > 1 else 150.0
+    mean_exp = float(monthly_deb.mean()) if not monthly_deb.empty else 0.0
+    std_exp = float(monthly_deb.std()) if len(monthly_deb) > 1 else 0.0
 
     # Rilevamento Stipendio / Flussi regolari di reddito
     salary_tx = credits[credits["category"] == "Stipendio"]

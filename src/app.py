@@ -134,9 +134,9 @@ def run_simulation(req: SimulationRequest):
 
     sc = req.starting_cash if req.starting_cash is not None else summary.recommended_starting_cash
     si = req.starting_inv if req.starting_inv is not None else summary.total_investments
-    emp_salary = stats.get("detected_salary", 2000.0)
-    emp_burn_mean = stats.get("monthly_expenses_mean", 1300.0)
-    emp_burn_std = stats.get("monthly_expenses_std", 200.0)
+    emp_salary = stats.get("detected_salary", 0.0)
+    emp_burn_mean = stats.get("monthly_expenses_mean", 0.0)
+    emp_burn_std = stats.get("monthly_expenses_std", 0.0)
 
     res = se.run_simulation(
         start=req.start_date,

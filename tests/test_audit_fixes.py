@@ -326,6 +326,22 @@ class TestAuditFixes(unittest.TestCase):
         self.assertIn(".csv", valid_exts)
         self.assertIn(".pdf", valid_exts)
 
+    def test_empty_statements_zero_burn_rate(self):
+        """Verifica che senza estratti conto o transazioni, burn rate e medie non mostrino valori predefiniti fittizi."""
+        # 1. Test PortfolioAggregator su lista vuota
+        agg = PortfolioAggregator([])
+        summary = agg.aggregate()
+        self.assertEqual(summary.monthly_burn_rate, 0.0)
+        self.assertEqual(summary.liquidity_buffer_months, 0.0)
+
+        # 2. Test compute_bank_monthly_statistics su DataFrame vuoto
+        stats_empty = bdm.compute_bank_monthly_statistics(pd.DataFrame())
+        self.assertEqual(stats_empty["monthly_expenses_mean"], 0.0)
+        self.assertEqual(stats_empty["monthly_expenses_std"], 0.0)
+        self.assertEqual(stats_empty["detected_salary"], 0.0)
+        self.assertEqual(stats_empty["total_inflow"], 0.0)
+        self.assertEqual(stats_empty["total_outflow"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
