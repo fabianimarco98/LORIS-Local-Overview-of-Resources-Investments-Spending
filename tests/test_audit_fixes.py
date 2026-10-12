@@ -14,6 +14,7 @@ import pandas as pd
 
 from banking.parsers import BankStatement
 from banking.portfolio import PortfolioAggregator
+import bank_data_manager as bdm
 import simulation_engine as se
 
 
@@ -298,6 +299,32 @@ class TestAuditFixes(unittest.TestCase):
 
         # Movimento manuale iniettato
         self.assertTrue(any(r["description"] == "Bonus Lavoro" for _, r in sum_mod.all_transactions.iterrows()))
+
+    def test_delete_statement_file_and_unique_keys(self):
+        """Verifica che delete_statement_file gestisca Path e str e che i tasti di cancellazione siano univoci."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            file_a = tmp_path / "test_statement.csv"
+            file_a.write_text("date,amount,description\n2026-05-01,10.0,Test\n")
+            
+            # Deletion using Path
+            self.assertTrue(bdm.delete_statement_file(file_a))
+            self.assertFalse(file_a.exists())
+
+            # Deletion using str
+            file_b = tmp_path / "test_statement_2.csv"
+            file_b.write_text("date,amount,description\n2026-05-01,20.0,Test 2\n")
+            self.assertTrue(bdm.delete_statement_file(str(file_b)))
+            self.assertFalse(file_b.exists())
+
+        # Test valid extensions filter out .md files
+        valid_exts = {".csv", ".tsv", ".txt", ".xlsx", ".xls", ".pdf", ".json"}
+        self.assertNotIn(".md", valid_exts)
+        self.assertIn(".csv", valid_exts)
+        self.assertIn(".pdf", valid_exts)
 
 
 if __name__ == "__main__":

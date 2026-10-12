@@ -4,7 +4,7 @@
 # Bilingual: Italiano (IT) & English (EN)
 # ============================================================
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -150,13 +150,14 @@ def undo_last_upload():
         st.rerun()
 
 
-def delete_file_and_refresh(fname: str):
+def delete_file_and_refresh(file_target: Union[str, Path]):
     """Elimina uno specifico file estratto conto da disco e ricarica i dati."""
-    if bdm.delete_statement_file(fname):
-        if fname in st.session_state.last_uploaded_files:
-            st.session_state.last_uploaded_files.remove(fname)
+    name = Path(file_target).name
+    if bdm.delete_statement_file(file_target):
+        if name in st.session_state.last_uploaded_files:
+            st.session_state.last_uploaded_files.remove(name)
         st.cache_data.clear()
-        st.toast(f"🗑️ File {fname} eliminato!")
+        st.toast(f"🗑️ File {name} eliminato!")
         st.rerun()
 
 
@@ -208,12 +209,16 @@ def load_bank_summary_cached(dir_mtime: float, count_files: int):
     return statements, summary
 
 
+VALID_STATEMENT_EXTENSIONS = {".csv", ".tsv", ".txt", ".xlsx", ".xls", ".pdf", ".json"}
 search_dirs = [STATEMENTS_DIR, INVESTMENTS_DIR, WALLET_DIR]
 dir_mtime = 0.0
 file_count = 0
 for sd in search_dirs:
     if sd.exists():
-        valid_files = [f for f in sd.iterdir() if f.is_file() and not f.name.startswith(".")]
+        valid_files = [
+            f for f in sd.iterdir()
+            if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in VALID_STATEMENT_EXTENSIONS
+        ]
         file_count += len(valid_files)
         if valid_files:
             dir_mtime = max(dir_mtime, max(f.stat().st_mtime for f in valid_files))
@@ -350,19 +355,20 @@ with st.sidebar:
         for sd in search_dirs:
             if sd.exists():
                 for f in sorted(sd.iterdir()):
-                    if f.is_file() and not f.name.startswith("."):
+                    if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in VALID_STATEMENT_EXTENSIONS:
                         disk_files.append(f)
 
         if disk_files:
             st.markdown(f"<span style='font-size:0.85em; font-weight:600;'>{t('loaded_files_list', lang)}</span>", unsafe_allow_html=True)
-            for df_file in disk_files:
+            for idx, df_file in enumerate(disk_files):
                 col_fn, col_del = st.columns([0.80, 0.20])
                 with col_fn:
                     short_name = df_file.name if len(df_file.name) <= 20 else df_file.name[:18] + "..."
                     st.caption(f"📄 `{short_name}`")
                 with col_del:
-                    if st.button("🗑️", key=f"del_sidebar_{df_file.name}", help=f"{t('delete_file', lang)}: {df_file.name}"):
-                        delete_file_and_refresh(df_file.name)
+                    btn_key = f"del_sidebar_{df_file.parent.name}_{df_file.name}_{idx}"
+                    if st.button("🗑️", key=btn_key, help=f"{t('delete_file', lang)}: {df_file.name}"):
+                        delete_file_and_refresh(df_file)
 
         col_act1, col_act2 = st.columns([0.5, 0.5])
         with col_act1:

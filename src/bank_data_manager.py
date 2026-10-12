@@ -15,7 +15,7 @@ Modulo principale per v4_speciale (indipendente al 100% da Monefy):
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 import numpy as np
 import pandas as pd
 
@@ -568,12 +568,21 @@ def save_user_overrides(overrides: Dict[str, Any]) -> bool:
         return False
 
 
-def delete_statement_file(filename: str) -> bool:
+def delete_statement_file(filename: Union[str, Path]) -> bool:
     """
     Elimina fisicamente un file estratto conto da disco (bank_statements, investments o wallet)
     e restituisce True se il file è stato rimosso con successo.
     """
-    clean_name = Path(filename).name
+    p = Path(filename)
+    if p.is_file() and p.exists():
+        try:
+            p.unlink()
+            return True
+        except Exception as e:
+            print(f"[ERROR] Errore cancellazione file {p}: {e}")
+            return False
+
+    clean_name = p.name
     deleted = False
     for folder_rel in [Path("input/bank_statements"), Path("input/investments"), Path("input/wallet")]:
         for base_p in [folder_rel, Path.cwd() / folder_rel, Path(__file__).resolve().parent.parent / folder_rel]:
