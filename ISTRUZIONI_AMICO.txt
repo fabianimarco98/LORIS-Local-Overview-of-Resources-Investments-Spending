@@ -1,81 +1,163 @@
 ======================================================================
-  🐾 BENVENUTO IN LORIS — Local Overview of Resources, Investments & Spending
+  🐾 GUIDA COMPLETA A LORIS — Local Overview of Resources, Investments & Spending
 ======================================================================
 
 LORIS è un sistema di finanza personale offline, privato e riservato al 100%.
-Non richiede account, non usa server cloud e non invia alcun dato all'esterno.
-Funziona direttamente leggendo i tuoi estratti conto bancari (PDF, CSV o Excel).
+Non richiede registrazione, non invia alcun dato a server esterni e garantisce
+privacy assoluta. Funziona direttamente elaborando i tuoi estratti conto bancari.
 
-----------------------------------------------------------------------
-1. COME AVVIARE L'APPLICAZIONE (1-CLIC)
-----------------------------------------------------------------------
-• SU MAC (macOS):
-  Fai semplicemente DOPPIO CLIC sul file:
-  👉 start.command
-  (Se macOS ti chiede conferma al primo avvio, fai tasto destro -> Apri).
-  Al primo avvio configurerà automaticamente l'ambiente e aprirà la dashboard nel tuo browser!
+======================================================================
+1. COME ESPORTARE GLI ESTRATTI CONTO DALLE TUE BANCHE & APP
+======================================================================
 
-  In alternativa, puoi anche aprire il Terminale in questa cartella e digitare:
-  ./run_app.sh
+Per ottenere i dati da dare a LORIS, esporta i file ufficiali dalle tue banche:
 
-• SU WINDOWS:
-  Fai semplicemente DOPPIO CLIC sul file:
-  👉 start.bat
-  (Richiede Python 3.10+ installato con la spunta "Add Python to PATH").
+• 📱 REVOLUT:
+  1. Apri l'app Revolut sullo smartphone (o dal browser su revolut.com).
+  2. Dalla schermata Home, tocca i tre puntini "..." accanto al saldo oppure "Estratti conto" / "Statement".
+  3. Seleziona il tipo di documento: "Estratto conto" (Account Statement).
+  4. Scegli il formato: Consigliato CSV (oppure PDF).
+  5. Scegli l'intervallo temporale (es. "Tutto il periodo", "Ultimi 12 mesi", o un mese specifico).
+  6. Tocca "Genera" / "Esporta" e invia il file al computer (AirDrop, email, salvataggio file).
 
-----------------------------------------------------------------------
-2. COME CARICARE I TUOI DATI BANCARI
-----------------------------------------------------------------------
-Hai due modi semplicissimi:
-A) DALL'INTERFACCIA WEB (Consigliato):
-   - Apri la barra laterale sinistra ("Carica Estratti Conto").
-   - Trascina i tuoi file bancari (PDF, CSV, Excel) nell'area di upload.
-   - LORIS riconosce automaticamente la tua banca, estrae le transazioni,
-     neutralizza i trasferimenti tra conti tuoi e calcola saldi e statistiche!
+• 📱 TRADE REPUBLIC:
+  - Metodo A (PDF ufficiale mensile/trimestrale):
+    1. Apri l'app Trade Republic -> Profilo (in basso a destra o iniziale in alto a sinistra).
+    2. Vai nella sezione "Documenti" / "Attività".
+    3. Cerca i documenti nominati "Estratto conto" / "Account Statement" / "Kontoauszug".
+    4. Scarica il file PDF.
+  - Metodo B (CSV transazioni da portale Web o App):
+    1. Accedi da computer a traderepublic.com (o da app).
+    2. Nella sezione saldo / transazioni, clicca su "Esporta transazioni" / "Download CSV".
+    3. Scarica il file CSV. LORIS riconosce entrambi i formati!
 
-B) DALLA CARTELLA DEL COMPUTER:
-   - Copia i tuoi file bancari direttamente nella cartella:
-     input/bank_statements/
-   - Se hai un portafoglio ETF o una lista titoli, copiala in:
-     input/investments/
-   - Se usi un'app per le spese come Wallet (BudgetBakers), copiala in:
-     input/wallet/ (oppure trascinala direttamente nell'interfaccia!)
-   - Clicca su "Ricarica Dati" nell'app.
+• 📱 WALLET APP (BudgetBakers - Spese & Contanti Cash):
+  1. Apri l'app Wallet sul telefono o su web.budgetbakers.com.
+  2. Vai su Impostazioni -> "Esporta dati" (Export data).
+  3. Seleziona il formato "CSV" e l'intervallo di date desiderato.
+  4. Scarica il file CSV. Utile soprattutto per tracciare pagamenti in contanti (CASH).
 
-Banche e App supportate nativamente:
-Trade Republic (PDF e CSV), Revolut, Erste Bank / Sparkasse, Intesa Sanpaolo,
-UniCredit, Fineco, N26, Widiba, Poste Italiane, Scalable Capital, Degiro,
-Wallet App (BudgetBakers con tracciamento contanti CASH), e qualsiasi estratto generico.
+• 🏛️ ALTRE BANCHE ITALIANE ED EUROPEE (Intesa Sanpaolo, UniCredit, Fineco, N26, Widiba, Sparkasse, Poste Italiane, ecc.):
+  1. Accedi all'Home Banking dal sito web della banca da computer.
+  2. Vai nella sezione "Movimenti" o "Estratto Conto e Documenti".
+  3. Cerca il pulsante "Esporta" / "Scarica movimenti" e scegli formato CSV, Excel (.xlsx/.xls) o PDF.
+  4. Salva il file sul tuo computer.
 
-----------------------------------------------------------------------
-3. FUNZIONE UNDO & MODIFICHE MANUALI (MASSIMO CONTROLLO)
-----------------------------------------------------------------------
-• ANNULLA ULTIMO CARICAMENTO (UNDO):
-  Se carichi un file per errore, appare subito il pulsante "↩️ Annulla Ultimo Caricamento"
-  nella barra laterale e nella scheda delle transazioni. Con un clic il file viene rimosso
-  e lo stato precedente viene ripristinato!
-• ELIMINA FILE SINGOLI:
-  Nella barra laterale puoi cliccare 🗑️ accanto a qualsiasi file salvato su disco per rimuoverlo.
-• MODIFICA MANUALE SALDI:
-  Nella scheda "Patrimonio & Saldi", puoi aprire "✏️ Modifica Manuale Saldi dei Conti"
-  per correggere o impostare a mano il saldo esatto di qualsiasi conto e cliccare "Salva".
-• MODIFICA CATEGORIE & TRANSAZIONI:
-  Nella scheda "Estratti Conto & Transazioni", puoi modificare la categoria di una spesa,
-  contrassegnarla come giroconto o escluderla, oppure aggiungere nuovi movimenti manuali col tasto "+".
+======================================================================
+2. COME INSTALLARE E AVVIARE LORIS
+======================================================================
 
-----------------------------------------------------------------------
-4. CHAT CON L'AI LOCALE (OPZIONALE)
-----------------------------------------------------------------------
-LORIS include un motore di analisi finanziaria offline sempre attivo.
-Se vuoi anche chattare in linguaggio naturale con l'intelligenza artificiale locale:
-1. Installa Ollama (gratuito e open-source da https://ollama.com oppure `brew install ollama`)
-2. Apri il Terminale e scarica un modello leggero:
+• 🍏 SU MAC (macOS):
+  1. Estrai la cartella LORIS (se hai scaricato il file .zip).
+  2. Fai semplicemente DOPPIO CLIC sul file:
+     👉 start.command
+  3. Se macOS mostra l'avviso "Impossibile aprire perché proviene da uno sviluppatore non identificato":
+     - Fai TASTO DESTRO (o Control + Clic) su `start.command` -> seleziona "Apri" -> clicca "Apri".
+     - Questa conferma è richiesta solo la prima volta.
+  4. Lo script configurerà automaticamente l'ambiente Python e aprirà la dashboard nel tuo browser!
+
+  Metodo alternativo da Terminale:
+  Apri il Terminale nella cartella ed esegui:
+     ./run_app.sh
+
+  Per generare l'applicazione nativa per macOS con icona nel Dock:
+     ./run_app.sh macos-app
+
+• 🪟 SU WINDOWS:
+  1. Assicurati di avere Python 3.10 o successivo installato (scaricalo da https://www.python.org/downloads/
+     ricordandoti di spuntare la casella "Add Python to PATH" durante l'installazione).
+  2. Estrai la cartella LORIS.
+  3. Fai semplicemente DOPPIO CLIC sul file:
+     👉 start.bat
+  4. Lo script installerà le dipendenze in locale e aprirà automaticamente http://localhost:8502 nel browser.
+
+• 🐧 SU LINUX:
+  Apri il terminale nella cartella ed esegui:
+     chmod +x run_app.sh
+     ./run_app.sh
+
+======================================================================
+3. COME CARICARE I FILE IN LORIS
+======================================================================
+
+Una volta avviata l'app:
+A) TRAMITE TRASCINAMENTO (Drag & Drop nell'interfaccia - Consigliato):
+   - Nella barra laterale sinistra trovi il riquadro "Carica Estratti Conto (PDF, CSV, Excel)".
+   - Trascina uno o più file direttamente nel riquadro.
+   - LORIS riconosce istantaneamente la banca, pulisce le transazioni, riconcilia
+     i giroconti interni ed aggiorna saldi e grafici.
+
+B) TRAMITE CARTELLA DEL COMPUTER:
+   - Copia i file degli estratti conto in:
+     `input/bank_statements/`
+   - Se hai un file con i tuoi investimenti / titoli azionari / ETF:
+     `input/investments/`
+   - Se hai il CSV esportato da Wallet (BudgetBakers):
+     `input/wallet/`
+   - Nella dashboard clicca su "Ricarica Dati".
+
+======================================================================
+4. MODIFICHE MANUALI & FUNZIONE UNDO (MASSIMO CONTROLLO)
+======================================================================
+
+• ↩️ ANNULLA ULTIMO CARICAMENTO (Undo):
+  Se carichi per errore un file non corretto o duplicato, nella barra laterale sinistra
+  compare il pulsante "↩️ Annulla Ultimo Caricamento": con un clic ripristini la situazione precedente.
+
+• 🗑️ ELIMINA FILE SINGOLI:
+  Sempre nella barra laterale, sotto la lista dei file caricati, c'è un'icona 🗑️ accanto ad ogni file
+  per rimuoverlo singolarmente da disco.
+
+• ✏️ MODIFICA MANUALE SALDI DEI CONTI:
+  Nella scheda "🏦 Patrimonio & Saldi", apri il riquadro a scomparsa "✏️ Modifica Manuale Saldi dei Conti":
+  puoi verificare il saldo rilevato da LORIS e sovrascriverlo con il saldo esatto a tua scelta.
+
+• ✏️ MODIFICA CATEGORIE & TRANSAZIONI:
+  Nella scheda "📑 Estratti Conto & Transazioni", apri "✏️ Modifica Transazioni & Categorie":
+  puoi cambiare la categoria di qualunque spesa, escludere un movimento o contrassegnarlo come giroconto.
+
+• ➕ AGGIUNGI MOVIMENTO MANUALE:
+  Puoi aggiungere a mano qualsiasi spesa o entrata non presente nell'estratto conto.
+
+======================================================================
+5. COME CONDIVIDERE O ESPORTARE LORIS AD ALTRE PERSONE
+======================================================================
+
+Se vuoi passare LORIS ad un amico o su un altro computer in totale sicurezza:
+
+1. VIA GITHUB (Consigliato per ricevere aggiornamenti automatici):
+   Condividi il link del repository pubblico:
+   👉 https://github.com/fabianimarco98/LORIS-Local-Overview-of-Resources-Investments-Spending
+
+   Il tuo amico può scaricare lo ZIP cliccando su "Code" -> "Download ZIP" oppure clonare con:
+   git clone https://github.com/fabianimarco98/LORIS-Local-Overview-of-Resources-Investments-Spending.git
+
+2. VIA PACCHETTO ZIP CONDIVISIBILE PULITO:
+   Dalla cartella del progetto, esegui da terminale:
+   ./run_app.sh package
+   Verrà generato il file:
+   👉 LORIS_Condividi.zip
+   Questo archivio esclude automaticamente il 100% dei tuoi estratti conto personali,
+   i file PDF/CSV privati, i log e i file temporanei. Puoi mandarlo via Telegram,
+   AirDrop o Google Drive in tutta serenità!
+
+======================================================================
+6. CHAT AI LOCALE CON OLLAMA (OPZIONALE)
+======================================================================
+
+LORIS dispone già di un potente motore di regole offline. Se desideri anche chattare
+in linguaggio naturale con i tuoi dati:
+1. Installa Ollama da https://ollama.com (oppure via Homebrew con `brew install ollama`).
+2. Scarica un modello rapido e leggero da terminale:
    ollama run llama3.2
-3. LORIS si collegherà automaticamente in locale sulla porta 11434 con privacy totale!
+3. LORIS si collegherà automaticamente in locale (porta 11434). Nessun dato lascia il tuo PC!
 
-----------------------------------------------------------------------
-5. PRIVACY E SICUREZZA
-----------------------------------------------------------------------
-• I tuoi dati restano esclusivamente sul tuo computer.
-• Puoi usare LORIS anche completamente offline (senza connessione internet).
+======================================================================
+7. SUPPORTO & DONAZIONI
+======================================================================
+
+LORIS è un progetto indipendente e completamente open-source.
+Se trovi utile questa applicazione:
+☕ Offri un caffè allo sviluppatore: https://www.buymeacoffee.com/fabianimarco98
+⭐ Lascia una stella sul repository GitHub!
 ======================================================================
