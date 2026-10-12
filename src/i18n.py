@@ -474,6 +474,21 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "tx_saved_success": {"it": "Modifiche alle transazioni salvate con successo!", "en": "Transaction edits saved successfully!"},
     "balances_saved_success": {"it": "Saldi personalizzati salvati con successo!", "en": "Custom balances saved successfully!"},
     "reset_success": {"it": "Tutti i dati sono stati ripristinati alle letture originali degli estratti conto!", "en": "All data has been reset to original statement readings!"},
+
+    # Donations & Community Support
+    "support_project_title": {"it": "☕ Supporta il Progetto", "en": "☕ Support the Project"},
+    "support_project_desc": {
+        "it": "Se trovi utile LORIS per monitorare le tue finanze, comprendere i tuoi flussi di cassa o pianificare con le simulazioni Monte Carlo, puoi supportare lo sviluppo indipendente e open-source!",
+        "en": "If you find LORIS useful for tracking your finances, understanding cash flows, or planning with Monte Carlo simulations, you can support its independent open-source development!"
+    },
+    "buy_me_a_coffee_btn": {"it": "☕ Offrimi un Caffè su Buy Me a Coffee", "en": "☕ Buy Me a Coffee"},
+    "github_repo_btn": {"it": "⭐ Repository su GitHub", "en": "⭐ Star on GitHub"},
+    "github_sponsor_btn": {"it": "💖 Sponsorizza su GitHub", "en": "💖 Sponsor on GitHub"},
+    "support_sidebar_box": {"it": "Ti piace LORIS?", "en": "Enjoying LORIS?"},
+    "support_sidebar_sub": {
+        "it": "Supporta lo sviluppo indipendente e 100% offline!",
+        "en": "Support 100% private, offline open-source development!"
+    },
 }
 
 

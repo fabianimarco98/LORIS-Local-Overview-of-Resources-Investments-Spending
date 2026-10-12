@@ -432,6 +432,31 @@ with st.sidebar:
         else:
             st.info("💡 `brew install ollama`")
 
+    st.markdown("---")
+    st.markdown(
+        f"""
+        <div style="background: rgba(255, 129, 63, 0.08); border: 1px solid rgba(255, 129, 63, 0.35); border-radius: 8px; padding: 12px; text-align: center; margin-top: 5px;">
+            <div style="font-size: 13px; font-weight: 600; color: #ff813f; margin-bottom: 4px;">
+                ☕ {t('support_sidebar_box', lang)}
+            </div>
+            <div style="font-size: 11px; opacity: 0.85; margin-bottom: 10px; line-height: 1.35;">
+                {t('support_sidebar_sub', lang)}
+            </div>
+            <a href="https://www.buymeacoffee.com/fabianimarco98" target="_blank" style="text-decoration: none;">
+                <div style="background-color: #FF813F; color: white; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+                    <span>☕ Buy Me a Coffee</span>
+                </div>
+            </a>
+            <div style="margin-top: 8px;">
+                <a href="https://github.com/fabianimarco98/LORIS-Local-Overview-of-Resources-Investments-Spending" target="_blank" style="font-size: 11px; color: inherit; text-decoration: underline; opacity: 0.8;">
+                    ⭐ GitHub Repo
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
 
 # ------------------------------------------------------------
 # HEADER PRINCIPALE
@@ -1409,3 +1434,45 @@ with tab_settings:
             st.success("Placeholder configurato con successo!" if lang == "it" else "Placeholder configured successfully!")
         else:
             st.info("Campo lasciato vuoto. LORIS opera al 100% da estratti conto locali." if lang == "it" else "Field left empty. LORIS operates 100% from local bank statements.")
+
+    st.markdown("---")
+
+    # Support & Donations / Supporto & Donazioni
+    st.markdown(f"### {t('support_project_title', lang)}")
+    st.caption(t("support_project_desc", lang))
+
+    col_don1, col_don2, col_don3 = st.columns([1, 1, 1])
+    with col_don1:
+        st.markdown(
+            """
+            <a href="https://www.buymeacoffee.com/fabianimarco98" target="_blank" style="text-decoration: none;">
+                <div style="background-color: #FF813F; color: white; padding: 12px 16px; border-radius: 8px; font-weight: bold; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+                    ☕ Buy Me a Coffee
+                </div>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+    with col_don2:
+        st.markdown(
+            """
+            <a href="https://github.com/sponsors/fabianimarco98" target="_blank" style="text-decoration: none;">
+                <div style="background-color: #EA4AAA; color: white; padding: 12px 16px; border-radius: 8px; font-weight: bold; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+                    💖 GitHub Sponsors
+                </div>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+    with col_don3:
+        st.markdown(
+            """
+            <a href="https://github.com/fabianimarco98/LORIS-Local-Overview-of-Resources-Investments-Spending" target="_blank" style="text-decoration: none;">
+                <div style="background-color: #24292e; color: white; padding: 12px 16px; border-radius: 8px; font-weight: bold; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.2);">
+                    ⭐ GitHub Repo
+                </div>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+

@@ -1,9 +1,11 @@
 # 🐾 LORIS — Local Overview of Resources, Investments & Spending
 
-[![Tests](https://img.shields.io/badge/Tests-42%2F42%20Passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-66%2F66%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20Desktop%20%7C%20Web-blue)]()
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Local%20%7C%20Zero--Knowledge-success)]()
 [![Languages](https://img.shields.io/badge/Languages-Italiano%20%7C%20English-orange)]()
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-yellow?style=flat&logo=buy-me-a-coffee)](https://www.buymeacoffee.com/fabianimarco98)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=flat&logo=github-sponsors)](https://github.com/sponsors/fabianimarco98)
 
 > **LORIS** (*Local Overview of Resources, Investments & Spending*) is an open-source, private, zero-knowledge personal finance system built as a **native macOS desktop application (`LORIS.app`)** and interactive web dashboard. It is driven **100% directly from your bank statements** (CSV, TSV, Excel, PDF), featuring deep retrospective cash flow analytics, internal transfer reconciliation, bilingual interface (Italian 🇮🇹 & English 🇬🇧), generalized Monte Carlo stochastic wealth forecasting, and local AI (Ollama).
 > 
@@ -157,11 +159,13 @@ v4_speciale/
 
 ## 🧪 Testing
 
-Run all 42 unit, stress, and integration tests:
+Run all 66 unit, stress, and integration tests:
 ```bash
+./run_app.sh test
+# or
 python -m unittest discover tests
 ```
-*Current test suite status: 42/42 passing (100% pass rate).*
+*Current test suite status: 66/66 passing (100% pass rate).*
 
 ---
 
@@ -171,3 +175,16 @@ LORIS was created with strict privacy principles:
 - **No telemetry, no tracking, no cloud dependencies.**
 - All parsing occurs in local RAM on your machine.
 - Your bank account statements, balances, and transaction details remain strictly on your device.
+
+---
+
+## ☕ Support the Project / Donazioni
+
+Se trovi utile **LORIS** per monitorare le tue finanze, comprendere i tuoi flussi di cassa o pianificare il tuo futuro con le simulazioni Monte Carlo, puoi supportare lo sviluppo indipendente e open-source del progetto!
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support%20LORIS-orange?style=for-the-badge&logo=buy-me-a-coffee)](https://www.buymeacoffee.com/fabianimarco98)
+
+👉 **[Supporta su Buy Me a Coffee (fabianimarco98)](https://www.buymeacoffee.com/fabianimarco98)**
+
+Ogni contributo aiuta a mantenere LORIS gratuito, 100% offline, privato ed in continua evoluzione con nuovi parser per banche italiane ed europee.
+
