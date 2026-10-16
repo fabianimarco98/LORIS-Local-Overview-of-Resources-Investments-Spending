@@ -21,7 +21,7 @@ import pandas as pd
 
 import banking
 from banking.parsers import BankStatement, parse_bank_statement, GenericBankParser
-from banking.portfolio import PortfolioAggregator, PortfolioSummary
+from banking.portfolio import PortfolioAggregator, PortfolioSummary, monthly_spending_series, spending_debits
 from banking.anonymizer import PIIScrubber
 from banking.local_llm import LocalLLMClient
 from banking.user_profile import employer_keywords, extra_keywords
@@ -75,6 +75,10 @@ def load_all_bank_statements(
         if stmt.transactions.empty and not stmt.ending_balance:
             warnings_list.append(f"{fname}: nessuna transazione riconosciuta, file ignorato")
             return False
+        if stmt.metadata and stmt.metadata.get("balance_estimated"):
+            warnings_list.append(
+                f"{fname}: il file non contiene il saldo, stimato come somma dei movimenti: inserisci il saldo reale in Panoramica"
+            )
         aggregator.add_statement(stmt)
         return True
 
@@ -197,7 +201,7 @@ def categorize_transactions(
         if df.loc[idx, "is_internal_transfer"]:
             continue
         curr_cat = df.loc[idx, "category"]
-        if curr_cat in ["Da Classificare", "Generico", None, "", "Spesa", "Entrata"]:
+        if curr_cat in ["Da Classificare", "Generico", None, "", "Spesa", "Entrata", "Uscita", "Spesa Generale", "Altro", "Salary"]:
             df.loc[idx, "category"] = classify_transaction(row.get("description", ""), row.get("amount", 0.0))
 
     return df
@@ -271,7 +275,7 @@ def compute_bank_monthly_statistics(
     df["month"] = df["date"].dt.to_period("M")
 
     # Spese ed Entrate
-    debits = df[df["amount"] < 0].copy()
+    debits = spending_debits(df).copy()   # esclude investimenti/PAC: sono risparmio, non spesa
     credits = df[df["amount"] > 0].copy()
 
     monthly_deb = debits.groupby("month")["amount"].sum().abs()
@@ -294,8 +298,10 @@ def compute_bank_monthly_statistics(
     net_savings = tot_inflow - tot_outflow
     avg_savings_rate = float((net_savings / tot_inflow * 100.0) if tot_inflow > 0 else 0.0)
 
-    mean_exp = float(monthly_deb.mean()) if not monthly_deb.empty else 0.0
-    std_exp = float(monthly_deb.std()) if len(monthly_deb) > 1 else 0.0
+    # Media/deviazione sulla stessa definizione dell'intestazione (mesi parziali ai bordi scartati)
+    trimmed_deb = monthly_spending_series(df)
+    mean_exp = float(trimmed_deb.mean()) if not trimmed_deb.empty else 0.0
+    std_exp = float(trimmed_deb.std()) if len(trimmed_deb) > 1 else 0.0
 
     # Rilevamento Stipendio / Flussi regolari di reddito
     salary_tx = credits[credits["category"] == "Stipendio"]

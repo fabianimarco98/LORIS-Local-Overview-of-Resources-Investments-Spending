@@ -61,9 +61,23 @@ class TestFolderLoading(unittest.TestCase):
             stmts, summary = bdm.load_all_bank_statements(d)
         ids = [s.account_id for s in stmts]
         self.assertEqual(len(ids), len(set(ids)), "un solo statement per conto")
-        self.assertEqual(len(summary.load_warnings), 2)
+        self.assertTrue(any("saldo" in w and "stimato" in w for w in summary.load_warnings))
         self.assertTrue(any("empty.csv" in w for w in summary.load_warnings))
         self.assertTrue(any("junk.csv" in w for w in summary.load_warnings))
+
+    def test_estimated_balance_accumulates_over_months(self):
+        header = "Buchungsdatum;Partnername;Partner-IBAN;Betrag;Währung;Buchungstext\n"
+        sep = header + "02.09.2026;Billa;AT120000000000000001;-100,00;EUR;Kartenzahlung\n"
+        oct_ = header + "02.10.2026;Billa;AT120000000000000001;-50,00;EUR;Kartenzahlung\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "Erste_Sep.csv").write_text(sep)
+            (d / "Erste_Oct.csv").write_text(oct_)
+            stmts, summary = bdm.load_all_bank_statements(d)
+        erste = [x for x in stmts if x.institution == "Erste Bank"]
+        self.assertEqual(len(erste), 1)
+        self.assertAlmostEqual(erste[0].ending_balance, -150.0)   # somma di entrambi i mesi, non solo dell'ultimo
+        self.assertTrue(erste[0].metadata["balance_estimated"])
 
 
 if __name__ == "__main__":

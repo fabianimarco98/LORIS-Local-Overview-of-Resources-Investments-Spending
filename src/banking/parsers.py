@@ -455,7 +455,7 @@ class ErsteBankParser(BaseBankParser):
             ending_balance=float(tx_df["amount"].sum()) if not tx_df.empty else 0.0,
             transactions=tx_df,
             source_file=filename,
-            metadata={"bank": "Erste Bank Österreich"}
+            metadata={"bank": "Erste Bank Österreich", "balance_estimated": True}
         )
 
 
@@ -550,6 +550,7 @@ class ItalianBankParser(BaseBankParser):
         s_date = tx_df["date"].min() if not tx_df.empty else None
         e_date = tx_df["date"].max() if not tx_df.empty else None
         end_bal = tx_df["balance_after"].dropna().iloc[-1] if not tx_df.empty and tx_df["balance_after"].notna().any() else float(tx_df["amount"].sum())
+        balance_estimated = tx_df.empty or not tx_df["balance_after"].notna().any()
 
         return BankStatement(
             account_id="Conto_Corrente_Italia",
@@ -563,6 +564,7 @@ class ItalianBankParser(BaseBankParser):
             ending_balance=end_bal,
             transactions=tx_df,
             source_file=filename,
+            metadata={"balance_estimated": balance_estimated},
         )
 
 
@@ -654,6 +656,7 @@ class DigitalBankParser(BaseBankParser):
         s_date = tx_df["date"].min() if not tx_df.empty else None
         e_date = tx_df["date"].max() if not tx_df.empty else None
         end_bal = tx_df["balance_after"].dropna().iloc[-1] if not tx_df.empty and tx_df["balance_after"].notna().any() else float(tx_df["amount"].sum())
+        balance_estimated = tx_df.empty or not tx_df["balance_after"].notna().any()
 
         return BankStatement(
             account_id="Revolut_Current",
@@ -667,6 +670,7 @@ class DigitalBankParser(BaseBankParser):
             ending_balance=end_bal,
             transactions=tx_df,
             source_file=filename,
+            metadata={"balance_estimated": balance_estimated},
         )
 
 
@@ -1052,6 +1056,7 @@ class GenericBankParser(BaseBankParser):
         s_date = tx_df["date"].min() if not tx_df.empty else None
         e_date = tx_df["date"].max() if not tx_df.empty else None
         end_bal = tx_df["balance_after"].dropna().iloc[-1] if not tx_df.empty and tx_df["balance_after"].notna().any() else float(tx_df["amount"].sum())
+        balance_estimated = tx_df.empty or not tx_df["balance_after"].notna().any()
 
         # Asset class euristica dal nome del file
         fn_l = filename.lower()
@@ -1077,6 +1082,7 @@ class GenericBankParser(BaseBankParser):
             ending_balance=end_bal,
             transactions=tx_df,
             source_file=filename,
+            metadata={"balance_estimated": balance_estimated},
         )
 
     def _parse_pdf(self, file_content: Union[str, bytes], filename: str) -> BankStatement:
@@ -1380,6 +1386,7 @@ class PdfBankParser(BaseBankParser):
 
         # Ricerca del saldo finale nel testo
         end_bal = None
+        balance_estimated = False
         bal_match = re.search(
             r"(?:saldo\s+(?:finale|contabile|al|disponibile|nuovo)|closing\s+balance|ending\s+balance|final\s+balance|schlusssaldo|endstand|alter\s+kontostand|neuer\s+kontostand)[:\s]+([+-]?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})\s*(?:[-+]|[SH]|DR|CR)?)",
             full_text,
@@ -1389,6 +1396,7 @@ class PdfBankParser(BaseBankParser):
             end_bal = clean_numeric_amount(bal_match.group(1))
         elif not tx_df.empty:
             end_bal = float(tx_df["amount"].sum())
+            balance_estimated = True
 
         fn_l = filename.lower()
         if any(k in fn_l for k in ["broker", "titoli", "invest", "portfolio", "deposito titoli", "wertpapier"]):
@@ -1416,7 +1424,7 @@ class PdfBankParser(BaseBankParser):
             ending_balance=end_bal or 0.0,
             transactions=tx_df,
             source_file=filename,
-            metadata={"raw_text_length": len(full_text), "tables_found": len(extracted_tables)}
+            metadata={"raw_text_length": len(full_text), "tables_found": len(extracted_tables), "balance_estimated": balance_estimated}
         )
 
     def _parse_trade_republic_pdf(self, full_text: str, filename: str) -> BankStatement:

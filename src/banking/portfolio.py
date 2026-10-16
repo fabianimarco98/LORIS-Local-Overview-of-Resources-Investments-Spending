@@ -58,6 +58,54 @@ ASSET_CLASS_COLORS = {
 }
 
 
+# Categorie/descrizioni di acquisto investimenti: non sono "spesa" (patrimonio che cambia forma)
+INVESTMENT_CATEGORIES = {"Investimento ETF / Azioni", "Investimenti & PAC"}
+INVESTMENT_DESC_REGEX = r"savings plan|sparplan|handel|buy trade"
+
+
+def spending_debits(df_tx: pd.DataFrame) -> pd.DataFrame:
+    """Uscite reali: esclude giroconti interni e acquisti di investimenti/PAC."""
+    if df_tx.empty or "amount" not in df_tx.columns:
+        return df_tx.iloc[0:0]
+    out = df_tx[df_tx["amount"] < 0]
+    if "is_internal_transfer" in out.columns:
+        out = out[~out["is_internal_transfer"].fillna(False).astype(bool)]
+    if "category" in out.columns:
+        out = out[~out["category"].isin(INVESTMENT_CATEGORIES)]
+    if "description" in out.columns:
+        out = out[~out["description"].astype(str).str.lower().str.contains(INVESTMENT_DESC_REGEX, regex=True, na=False)]
+    return out
+
+
+def monthly_spending_series(df_tx: pd.DataFrame, trim_partial: bool = True) -> pd.Series:
+    """
+    Spesa mensile (valori positivi, indice Period[M]) calcolata con `spending_debits`.
+    Con almeno 3 mesi di dati scarta il primo/ultimo mese se l'estratto non lo copre
+    (primo movimento dopo il giorno 5 o ultimo prima degli ultimi 5 giorni del mese).
+    È l'unica definizione di "spesa mensile" usata da intestazione, buffer e Analytics.
+    """
+    if df_tx.empty or "date" not in df_tx.columns:
+        return pd.Series(dtype=float)
+    dates = pd.to_datetime(df_tx["date"])
+    spese = spending_debits(df_tx)
+    if spese.empty:
+        return pd.Series(dtype=float)
+    monthly = spese.assign(_m=pd.to_datetime(spese["date"]).dt.to_period("M")).groupby("_m")["amount"].sum().abs()
+    if trim_partial:
+        first, last = dates.min(), dates.max()
+        months = dates.dt.to_period("M").nunique()
+        if months >= 3:
+            drop = []
+            if first.day > 5:
+                drop.append(first.to_period("M"))
+            if last.day < last.days_in_month - 5:
+                drop.append(last.to_period("M"))
+            trimmed = monthly.drop([m for m in drop if m in monthly.index])
+            if len(trimmed) >= 1:
+                monthly = trimmed
+    return monthly
+
+
 @dataclass
 class PortfolioSummary:
     total_net_worth: float
@@ -132,6 +180,11 @@ class PortfolioAggregator:
                 all_sources = ", ".join(dict.fromkeys(x.source_file for x in group if x.source_file))
                 combined_meta = latest_stmt.metadata.copy() if latest_stmt.metadata else {}
                 combined_meta["multi_statement_count"] = len(group)
+                merged_ending = latest_stmt.ending_balance
+                if latest_stmt.metadata and latest_stmt.metadata.get("balance_estimated"):
+                    # Nessun saldo reale nei file: il saldo è la somma di TUTTI i movimenti uniti, non dell'ultimo mese
+                    base = group[0].starting_balance or 0.0
+                    merged_ending = float(base + (merged_tx["amount"].sum() if "amount" in merged_tx.columns else 0.0))
 
                 cons_stmt = BankStatement(
                     account_id=acc_id,
@@ -142,7 +195,7 @@ class PortfolioAggregator:
                     start_date=earliest_start or latest_stmt.start_date,
                     end_date=latest_stmt.end_date,
                     starting_balance=group[0].starting_balance,
-                    ending_balance=latest_stmt.ending_balance,
+                    ending_balance=merged_ending,
                     transactions=merged_tx,
                     source_file=all_sources,
                     metadata=combined_meta,
@@ -213,6 +266,12 @@ class PortfolioAggregator:
 
         # 2. Rilevamento automatico trasferimenti interni (Giroconti)
         df_transfers = self._detect_internal_transfers(df_all_tx)
+        if not df_transfers.empty and not df_all_tx.empty:
+            # Marca le coppie trovate PRIMA di burn rate e buffer, così non contano come spesa
+            if "is_internal_transfer" not in df_all_tx.columns:
+                df_all_tx["is_internal_transfer"] = False
+            df_all_tx["is_internal_transfer"] = df_all_tx["is_internal_transfer"].fillna(False).astype(bool)
+            df_all_tx.loc[list(df_transfers["debit_index"]) + list(df_transfers["credit_index"]), "is_internal_transfer"] = True
 
         # 3. Ripartizione per Asset Class escludendo i tracker di spesa dal Net Worth bancario reale
         real_accs = df_accounts[~df_accounts["is_tracker"]] if not df_accounts.empty and "is_tracker" in df_accounts.columns else df_accounts
@@ -353,11 +412,10 @@ class PortfolioAggregator:
             credits = credits[~credits["is_cash"].fillna(False).astype(bool)]
 
         # Escludi acquisti di investimenti (PAC, ETF)
-        inv_cats = {"Investimento ETF / Azioni", "Investimenti & PAC"}
         if "category" in debits.columns:
-            debits = debits[~debits["category"].isin(inv_cats)]
+            debits = debits[~debits["category"].isin(INVESTMENT_CATEGORIES)]
         if "description" in debits.columns:
-            debits = debits[~debits["description"].str.lower().str.contains(r"savings plan|sparplan|handel|buy trade", regex=True, na=False)]
+            debits = debits[~debits["description"].astype(str).str.lower().str.contains(INVESTMENT_DESC_REGEX, regex=True, na=False)]
 
         matched = []
         used_credit_idx = set()
@@ -389,9 +447,10 @@ class PortfolioAggregator:
                 if _is_merchant(c_desc):
                     continue
 
-                # Per piccoli importi (< €100), esigi almeno un indizio testuale di giroconto
-                if target_amount < 100.0:
-                    if not (_has_transfer_hint(d_desc, d_cat, d_int) or _has_transfer_hint(c_desc, c_cat, c_int)):
+                # Serve un indizio testuale di giroconto; senza, solo coppie stesso giorno >= €100
+                # (evita di scambiare p.es. un affitto e uno stipendio di pari importo per un giroconto)
+                if not (_has_transfer_hint(d_desc, d_cat, d_int) or _has_transfer_hint(c_desc, c_cat, c_int)):
+                    if not (target_amount >= 100.0 and c_row["date"] == d_date):
                         continue
 
                 used_credit_idx.add(c_idx)
@@ -404,33 +463,27 @@ class PortfolioAggregator:
                     "amount": target_amount,
                     "from_desc": d_desc,
                     "to_desc": c_desc,
+                    "debit_index": d_idx,
+                    "credit_index": c_idx,
                 })
                 break
 
         return pd.DataFrame(matched)
 
     def _compute_burn_rate(self, df_tx: pd.DataFrame) -> float:
-        """Calcola la spesa media mensile reale (escludendo i giroconti interni)."""
+        """Spesa media mensile reale: giroconti e investimenti esclusi, mesi parziali scartati."""
         if df_tx.empty or "amount" not in df_tx.columns or "date" not in df_tx.columns:
             return 0.0
 
-        # Esclude transazioni segnate come giroconto con gestione robusta dei nulli
-        is_internal = df_tx["is_internal_transfer"].fillna(False).astype(bool) if "is_internal_transfer" in df_tx.columns else pd.Series(False, index=df_tx.index)
-        spese = df_tx[(df_tx["amount"] < 0) & (~is_internal)].copy()
-        if spese.empty:
-            return 0.0
-
         # Se abbiamo sia estratti bancari che tracker spese, privilegia i conti bancari per il buffer di cassa liquida
-        is_tr = spese["is_tracker"].fillna(False).astype(bool) if "is_tracker" in spese.columns else pd.Series(False, index=spese.index)
-        bank_spese = spese[~is_tr]
-        target_spese = bank_spese if not bank_spese.empty else spese
+        if "is_tracker" in df_tx.columns:
+            is_tr = df_tx["is_tracker"].fillna(False).astype(bool)
+            bank_tx = df_tx[~is_tr]
+            if not spending_debits(bank_tx).empty:
+                df_tx = bank_tx
 
-        target_spese = target_spese.copy()
-        target_spese["month"] = pd.to_datetime(target_spese["date"]).dt.to_period("M")
-        spese_m = target_spese.groupby("month")["amount"].sum().abs()
-        if len(spese_m) > 0:
-            return float(spese_m.mean())
-        return 0.0
+        spese_m = monthly_spending_series(df_tx)
+        return float(spese_m.mean()) if len(spese_m) > 0 else 0.0
 
     def _reconcile_with_monefy(
         self,
