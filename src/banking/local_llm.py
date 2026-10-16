@@ -11,17 +11,20 @@ Assistente di intelligenza artificiale 100% LOCALE e ANONIMO:
 """
 
 from dataclasses import dataclass, field
+import ipaddress
 import json
 import os
 import re
 import shutil
 import subprocess
 import time
+from urllib.parse import urlparse
 from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple
 import requests
 import pandas as pd
 
 from .anonymizer import PIIScrubber
+from .user_profile import employer_keywords, extra_keywords
 from .guardrails import FinancialFactSheet, FinancialGuardrail, FinancialToolRegistry
 
 
@@ -114,7 +117,7 @@ OFFLINE_MERCHANT_RULES = {
     ],
     # Affitto
     "Affitto": [
-        "affitto", "miete", "rent", "vermieter", "locazione", "canone di locazione", "musterstrasse"
+        "affitto", "miete", "rent", "vermieter", "locazione", "canone di locazione"
     ],
     # Casa / House
     "House (lavatrice, arredamento)": [
@@ -141,7 +144,7 @@ OFFLINE_MERCHANT_RULES = {
     ],
     # Università & Ricerca
     "Università + istruzione": [
-        "acme", "universita", "universitaet", "tuition", "tassa iscrizione", "learning", "coursera", "udemy"
+        "universita", "universitaet", "tuition", "tassa iscrizione", "learning", "coursera", "udemy"
     ],
     # Abbigliamento
     "Vestiti": [
@@ -163,7 +166,7 @@ OFFLINE_MERCHANT_RULES = {
     ],
     # Entrate
     "Salary": [
-        "gehalt", "stipendio", "salary", "acme wien", "acme university", "emolumento"
+        "gehalt", "stipendio", "salary", "emolumento"
     ],
     "Deposits": [
         "zinsen", "interessi", "trade republic zinsen", "dividendo", "cedola"
@@ -207,8 +210,17 @@ class LocalLLMClient:
         self.scrubber = PIIScrubber()
 
     def _validate_local_endpoint(self, url: str):
-        allowed_hosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
-        is_local = any(host in url.lower() for host in allowed_hosts)
+        try:
+            hostname = (urlparse(url).hostname or "").lower()
+        except ValueError:
+            hostname = ""
+        is_local = hostname == "localhost"
+        if not is_local and hostname:
+            try:
+                ip = ipaddress.ip_address(hostname)
+                is_local = ip.is_loopback or str(ip) == "0.0.0.0"
+            except ValueError:
+                is_local = False
         if not is_local:
             raise ValueError(
                 f"VIOLAZIONE PRIVACY: L'endpoint '{url}' non è su localhost. "
@@ -521,7 +533,7 @@ class LocalLLMClient:
 
         # 1. Controllo entrate note
         if amount > 0:
-            if any(k in t_low for k in ["acme", "stipendio", "gehalt", "acme university", "emolumento", "payroll"]):
+            if any(k in t_low for k in ["stipendio", "gehalt", "emolumento", "payroll", *employer_keywords()]):
                 return "Salary", 0.99, "Riconosciuto accredito stipendio"
             if any(k in t_low for k in ["zinsen", "interest", "trade republic"]):
                 return "Deposits", 0.95, "Riconosciuti interessi attivi sulla liquidità"
@@ -531,7 +543,7 @@ class LocalLLMClient:
 
         # 2. Controllo uscite per matching su dizionario con word-boundary per parole brevi
         for cat, keywords in OFFLINE_MERCHANT_RULES.items():
-            for kw in keywords:
+            for kw in [*keywords, *extra_keywords(cat)]:
                 if len(kw) <= 4 or kw in {"etf", "pac", "gas", "bar", "rent", "aldi", "coop", "pam", "q8"}:
                     if re.search(r"\b" + re.escape(kw) + r"\b", t_low):
                         return cat, 0.92, f"Corrispondenza parola chiave '{kw}'"

@@ -3,9 +3,10 @@ gatherUsageStats = false
 
 [server]
 headless = true
+address = "localhost"
 port = 8502
 enableCORS = false
-enableXsrfProtection = false
+enableXsrfProtection = true
 
 [theme]
 base = "dark"

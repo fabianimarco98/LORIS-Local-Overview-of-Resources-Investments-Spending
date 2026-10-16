@@ -39,6 +39,21 @@ class TestBankingAnonymizer(unittest.TestCase):
         self.assertTrue(clean)
         self.assertEqual(len(leaks), 0)
 
+    def test_spaced_iban_masking(self):
+        text = "Bonifico verso AT61 1904 3002 3457 3201 per affitto"
+        anon = self.scrubber.anonymize_text(text)
+        self.assertNotIn("1904 3002", anon)
+        self.assertIn("[IBAN_AT_01]", anon)
+
+    def test_phone_bic_and_to_from_names(self):
+        anon = self.scrubber.anonymize_text("Call +43 660 123 4567 BIC: GIBAATWWXXX")
+        self.assertNotIn("660 123", anon)
+        self.assertNotIn("GIBAATWW", anon)
+        anon = self.scrubber.anonymize_text("Transfer to Mario Rossi")
+        self.assertNotIn("Mario Rossi", anon)
+        # Parole bancarie e importi non vanno toccati
+        self.assertEqual(self.scrubber.anonymize_text("BONIFICO 1234,56 EUR"), "BONIFICO 1234,56 EUR")
+
     def test_card_and_cf_masking(self):
         text = "Carta 5167 1234 5678 9010 spesa; Codice Fiscale RSSMRA85M01H501Z"
         anon = self.scrubber.anonymize_text(text)
@@ -79,8 +94,8 @@ class TestBankParsers(unittest.TestCase):
     def test_erste_bank_parser(self):
         sample = """Buchungsdatum;Partnername;Partner-IBAN;Betrag;Buchungstext
 04.09.2026;McFit;AT123456789012345678;-29,90;Mitgliedsbeitrag
-14.09.2026;acme Wien;AT987654321098765432;2850,00;Gehalt September 2026
-30.09.2026;Vermieter;AT112233445566778899;-650,00;Miete musterstrasse"""
+14.09.2026;Acme GmbH;AT987654321098765432;2850,00;Gehalt September 2026
+30.09.2026;Vermieter;AT112233445566778899;-650,00;Miete Musterstrasse"""
         stmt = parse_bank_statement(sample, "Erste_George_Sep.csv")
         self.assertEqual(stmt.institution, "Erste Bank")
         self.assertEqual(stmt.asset_class, "LIQUID_CASH")
@@ -147,7 +162,7 @@ CARD_PAYMENT,Current,2026-09-02 18:30:00,2026-09-02 18:30:00,Non Stop Kino Wien,
         data = [
             ["Datum", "Buchungstext", "Betrag"],
             ["15.09.2026", "BILLA Supermarkt", "-25,40 EUR"],
-            ["16.09.2026", "Gehalt acme", "3.200,00 EUR"],
+            ["16.09.2026", "Gehalt Acme", "3.200,00 EUR"],
             ["20.09.2026", "Miete Wohnung", "-500,00 EUR"]
         ]
         story.append(Table(data))
@@ -193,7 +208,7 @@ class TestPortfolioAggregator(unittest.TestCase):
         stmt_tr = parse_bank_statement(tr_sample, "Trade_Republic.csv")
 
         erste_sample = """Buchungsdatum;Partnername;Partner-IBAN;Betrag;Buchungstext
-14.09.2026;acme Wien;AT987654321098765432;2850,00;Gehalt acme
+14.09.2026;Acme GmbH;AT987654321098765432;2850,00;Gehalt Acme
 15.09.2026;Trade Republic;DE890000000000000500;-500,00;Girokonto Übertrag
 30.09.2026;Vermieter;AT112233445566778899;-650,00;Miete"""
         stmt_erste = parse_bank_statement(erste_sample, "Erste_Bank.csv")
@@ -208,20 +223,43 @@ class TestPortfolioAggregator(unittest.TestCase):
         self.assertEqual(summary.internal_transfers.iloc[0]["amount"], 500.00)
 
 
+class TestUserProfile(unittest.TestCase):
+    def test_missing_profile_gives_neutral_defaults(self):
+        import os
+        from banking import user_profile
+        old = os.environ.get("LORIS_USER_PROFILE")
+        os.environ["LORIS_USER_PROFILE"] = "/nonexistent/profile.json"
+        try:
+            self.assertEqual(user_profile.owner_names(), [])
+            self.assertEqual(user_profile.employer_keywords(), [])
+            self.assertEqual(user_profile.extra_keywords("Affitto"), [])
+        finally:
+            if old is None:
+                os.environ.pop("LORIS_USER_PROFILE")
+            else:
+                os.environ["LORIS_USER_PROFILE"] = old
+
+
 class TestLocalLLMClient(unittest.TestCase):
     def test_security_rejects_external_hosts(self):
         with self.assertRaises(ValueError):
             LocalLLMClient(endpoint_url="https://api.openai.com/v1")
         with self.assertRaises(ValueError):
             LocalLLMClient(endpoint_url="http://192.168.1.100:11434")
+        for evil in ("http://localhost.evil.com", "http://127.0.0.1.nip.io",
+                     "https://evil.com/?q=localhost", "http://evil.com/localhost"):
+            with self.assertRaises(ValueError, msg=evil):
+                LocalLLMClient(endpoint_url=evil)
+        for ok in ("http://localhost:11434", "http://127.0.0.1:11434", "http://[::1]:11434"):
+            LocalLLMClient(endpoint_url=ok)
 
     def test_offline_categorization(self):
         client = LocalLLMClient()
-        res_miete = client.categorize_transaction("Miete musterstrasse 13", -650.00, "Vermieter")
+        res_miete = client.categorize_transaction("Miete Musterstrasse 13", -650.00, "Vermieter")
         self.assertEqual(res_miete["category"], "Affitto")
         self.assertGreater(res_miete["confidence"], 0.5)
 
-        res_salary = client.categorize_transaction("Gehalt acme Wien", 2850.00, "acme")
+        res_salary = client.categorize_transaction("Gehalt Acme GmbH", 2850.00, "Acme")
         self.assertEqual(res_salary["category"], "Salary")
 
     def test_audit_generation(self):

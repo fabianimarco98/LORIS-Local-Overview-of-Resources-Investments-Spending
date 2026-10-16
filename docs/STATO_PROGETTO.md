@@ -43,15 +43,15 @@
 | Componente | File Sorgente | Funzione Principale |
 | :--- | :--- | :--- |
 | **Applicazione Desktop macOS** | `LORIS.app` / `src/macos_app/` | App nativa macOS (Swift 6.x + AppKit + WebKit) con menu di sistema, icona e gestione daemon |
-| **Builder macOS App** | [build_macos_app.py](file:///Users/USER/Documents/projects/expenses_prediction/v4_speciale/src/build_macos_app.py) | Compilazione binario nativo, generazione icona con `iconutil` e firma ad-hoc codesign |
-| **Dashboard Web** | [app_streamlit.py](file:///Users/USER/Documents/projects/expenses_prediction/v4_speciale/src/app_streamlit.py) | Interfaccia a 6 tab bilingue (IT/EN) con analisi storica profonda, Monte Carlo e chat locale |
-| **Motore i18n Bilingue** | [i18n.py](file:///Users/USER/Documents/projects/expenses_prediction/v4_speciale/src/i18n.py) | Traduzioni e dizionari dinamici Italiano 🇮🇹 / English 🇬🇧 per UI, CLI e categorie |
-| **API REST** | [app.py](file:///Users/USER/Documents/projects/expenses_prediction/v4_speciale/src/app.py) | Backend FastAPI con endpoint per portfolio, transazioni, simulazione empirica e gestione/pull modelli AI |
-| **Interfaccia CLI** | [cli.py](file:///Users/USER/Documents/projects/expenses_prediction/v4_speciale/src/cli.py) | Tool CLI bilingue con comandi `status`, `analyze`, `simulate`, `ask`, `models`, `anonymize` |
-| **Bank Data Manager** | [bank_data_manager.py](file:///Users/USER/Documents/projects/expenses_prediction/v4_speciale/src/bank_data_manager.py) | Ingestion estratti conto, analisi retrospettiva flussi, cashflow mensile e rilevamento spese fisse |
-| **Simulation Engine** | [simulation_engine.py](file:///Users/USER/Documents/projects/expenses_prediction/v4_speciale/src/simulation_engine.py) | Motore Monte Carlo stocastico (5.000 simulazioni) con orizzonte configurabile (12-120 mesi) |
+| **Builder macOS App** | [build_macos_app.py](../src/build_macos_app.py) | Compilazione binario nativo, generazione icona con `iconutil` e firma ad-hoc codesign |
+| **Dashboard Web** | [app_streamlit.py](../src/app_streamlit.py) | Interfaccia a 6 tab bilingue (IT/EN) con analisi storica profonda, Monte Carlo e chat locale |
+| **Motore i18n Bilingue** | [i18n.py](../src/i18n.py) | Traduzioni e dizionari dinamici Italiano 🇮🇹 / English 🇬🇧 per UI, CLI e categorie |
+| **API REST** | [app.py](../src/app.py) | Backend FastAPI con endpoint per portfolio, transazioni, simulazione empirica e gestione/pull modelli AI |
+| **Interfaccia CLI** | [cli.py](../src/cli.py) | Tool CLI bilingue con comandi `status`, `analyze`, `simulate`, `ask`, `models`, `anonymize` |
+| **Bank Data Manager** | [bank_data_manager.py](../src/bank_data_manager.py) | Ingestion estratti conto, analisi retrospettiva flussi, cashflow mensile e rilevamento spese fisse |
+| **Simulation Engine** | [simulation_engine.py](../src/simulation_engine.py) | Motore Monte Carlo stocastico (5.000 simulazioni) con orizzonte configurabile (12-120 mesi) |
 | **Modulo Bancario** | `src/banking/` | Parser universali (PDF, CSV, Excel), `PIIScrubber`, `PortfolioAggregator`, `LocalLLMClient` |
-| **Launcher Globale** | [run_app.sh](file:///Users/USER/Documents/projects/expenses_prediction/v4_speciale/run_app.sh) | Launcher intelligente che avvia la vera app nativa LORIS.app (o `--browser`, `--api`, `--cli`, `--build`) |
+| **Launcher Globale** | [run_app.sh](../run_app.sh) | Launcher intelligente che avvia la vera app nativa LORIS.app (o `--browser`, `--api`, `--cli`, `--build`) |
 
 ---
 

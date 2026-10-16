@@ -9,6 +9,9 @@ SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+import os
+os.environ.setdefault("LORIS_USER_PROFILE", str(Path(__file__).resolve().parent / "fixtures" / "user_profile.json"))
+
 import numpy as np
 import pandas as pd
 

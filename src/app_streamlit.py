@@ -1395,7 +1395,7 @@ with tab_ai:
 
         with st.chat_message("assistant"):
             scrubber = PIIScrubber()
-            anon_df = scrubber.anonymize_dataframe(df_tx_categorized.head(30), ["description"]) if not df_tx_categorized.empty else pd.DataFrame()
+            anon_df = scrubber.anonymize_dataframe(df_tx_categorized.tail(30), ["description", "counterparty"]) if not df_tx_categorized.empty else pd.DataFrame()
             cash_yield_val = float(st.session_state.get("custom_cash_rate", 2.5))
 
             with st.spinner("LORIS analyzing locally..."):

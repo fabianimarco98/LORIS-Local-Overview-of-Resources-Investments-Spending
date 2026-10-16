@@ -115,8 +115,6 @@ def build():
     <dict>
         <key>NSAllowsLocalNetworking</key>
         <true/>
-        <key>NSAllowsArbitraryLoads</key>
-        <true/>
     </dict>
 </dict>
 </plist>

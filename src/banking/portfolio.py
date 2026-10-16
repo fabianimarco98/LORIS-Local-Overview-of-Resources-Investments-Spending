@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from .parsers import BankStatement
+from .user_profile import owner_names
 
 
 ASSET_CLASS_LABELS = {
@@ -311,8 +312,9 @@ class PortfolioAggregator:
 
         TRANSFER_HINTS = {
             "transfer", "giroconto", "top up", "top-up", "ricarica", "bonifico", "deposit",
-            "einzahlung", "auszahlung", "internal", "own account", "owner",
-            "revolut", "trade republic", "erste", "sparkasse", "unicredit", "intesa"
+            "einzahlung", "auszahlung", "internal", "own account",
+            "revolut", "trade republic", "erste", "sparkasse", "unicredit", "intesa",
+            *owner_names(),
         }
 
         MERCHANT_HINTS = {

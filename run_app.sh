@@ -7,7 +7,6 @@ set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd "$DIR"
 
-export HOME="$DIR"
 export STREAMLIT_CONFIG_DIR="$DIR/.streamlit"
 export PYTHONPATH="$DIR/src:$PYTHONPATH"
 
@@ -51,7 +50,7 @@ elif [ "$1" == "--api" ]; then
     echo "🚀 Avvio FastAPI Server (v4_speciale)..."
     echo "👉 Documentazione OpenAPI disponibile su: http://localhost:8000/docs"
     cd "$DIR/src"
-    exec "$PYTHON_EXEC" -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+    exec "$PYTHON_EXEC" -m uvicorn app:app --host 127.0.0.1 --port 8000
 elif [ "$1" == "--cli" ]; then
     shift
     exec "$PYTHON_EXEC" src/cli.py "$@"

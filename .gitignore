@@ -19,6 +19,13 @@ ENV/
 # CRITICAL PRIVACY: ESTRATTI CONTO E DATI BANCARI PERSONALI
 # Nessun documento finanziario reale deve mai finire su GitHub!
 # ============================================================
+input/*
+!input/README.md
+!input/templates/
+!input/bank_statements/
+!input/investments/
+!input/wallet/
+
 input/bank_statements/*
 !input/bank_statements/.gitkeep
 !input/bank_statements/README.md
@@ -34,6 +41,7 @@ input/wallet/*
 
 input/user_overrides.json
 input/modifiche_utente.json
+input/user_profile.json
 
 # Output, log ed esportazioni personali
 output/
@@ -45,7 +53,7 @@ temp/
 # Bundle compilati e pacchetti di distribuzione
 LORIS.app/
 Applications/
-LORIS_Condividi.zip
+*.zip
 dist/
 build/
 *.egg-info/

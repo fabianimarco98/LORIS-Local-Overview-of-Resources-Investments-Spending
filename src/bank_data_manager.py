@@ -8,7 +8,7 @@ Modulo principale per v4_speciale (indipendente al 100% da Monefy):
 - Filtra i giroconti / trasferimenti tra conti propri per evitare duplicazioni.
 - Categorizza le transazioni tramite motore euristico offline o LLM locale (Ollama / llama.cpp).
 - Calcola statistiche di spesa mensile (media, deviazione standard, burn rate, tasso di risparmio).
-- Rileva automaticamente entrate stipendiali (es. acme Gehalt).
+- Rileva automaticamente entrate stipendiali (es. Gehalt / Stipendio).
 - Fornisce i parametri di cassa iniziale e spese per alimentare il Simulation Engine Monte Carlo.
 """
 
@@ -24,10 +24,11 @@ from banking.parsers import BankStatement, parse_bank_statement, GenericBankPars
 from banking.portfolio import PortfolioAggregator, PortfolioSummary
 from banking.anonymizer import PIIScrubber
 from banking.local_llm import LocalLLMClient
+from banking.user_profile import employer_keywords, extra_keywords
 
 
 CATEGORY_KEYWORDS = {
-    "Affitto": ["miete", "affitto", "rent", "mortgage", "mutuo", "housing", "landlord", "musterstrasse", "locazione", "canone", "wohn", "immobilien", "hausverwaltung"],
+    "Affitto": ["miete", "affitto", "rent", "mortgage", "mutuo", "housing", "landlord", "locazione", "canone", "wohn", "immobilien", "hausverwaltung"],
     "Spesa & Alimentari": ["billa", "spar", "hofer", "lidl", "coop", "conad", "esselunga", "carrefour", "supermarket", "supermercato", "grocery", "groceries", "alimentar", "penny", "rewe", "walmart", "tesco", "kroger", "trader joe", "whole foods", "aldi"],
     "Bollette & Utenze": ["wiener netze", "gas", "strom", "enel", "a2a", "utenze", "luce", "acqua", "hera", "telecom", "vodafone", "bolletta", "electric", "utility", "power", "energy", "internet", "water bill"],
     "Palestra & Sport": ["mcfit", "fitinn", "palestra", "sport", "gym", "decathlon", "fitness", "climbing", "swim", "yoga"],
@@ -38,7 +39,7 @@ CATEGORY_KEYWORDS = {
     "Salute & Farmacia": ["apotheke", "farmacia", "medico", "arzt", "visita medica", "dentista", "sanit", "pharmacy", "doctor", "hospital", "clinic", "dental", "health", "medical"],
     "Investimenti & PAC": ["sparplan", "etf", "ishares", "vanguard", "amundi", "broker", "scalable", "degiro", "titoli", "trade republic", "investment", "shares", "stocks", "fidelity", "schwab"],
     "Interessi & Rendite": ["zinsen", "interessi", "dividendo", "cedola", "cashback", "interest", "dividend", "yield"],
-    "Stipendio & Compensi": ["acme", "gehalt", "stipendio", "salary", "universität", "unibo", "emolumento", "compenso", "retribuzione", "payroll", "wage", "direct deposit", "employer"],
+    "Stipendio & Compensi": ["gehalt", "stipendio", "salary", "universität", "unibo", "emolumento", "compenso", "retribuzione", "payroll", "wage", "direct deposit", "employer"],
 }
 
 
@@ -48,7 +49,7 @@ def _matches_keyword(kw: str, text: str) -> bool:
     text_clean = text.strip().lower()
     if not kw_clean or not text_clean:
         return False
-    if len(kw_clean) <= 4 or kw_clean in {"etf", "pac", "gas", "bar", "rent", "acme", "spar", "aldi", "coop", "pam", "q8", "tim", "wind", "aws"}:
+    if len(kw_clean) <= 4 or kw_clean in {"etf", "pac", "gas", "bar", "rent", "spar", "aldi", "coop", "pam", "q8", "tim", "wind", "aws"}:
         return bool(re.search(r"\b" + re.escape(kw_clean) + r"\b", text_clean))
     return kw_clean in text_clean
 
@@ -114,7 +115,7 @@ def classify_transaction(description: str, amount: float) -> str:
     desc_lower = str(description).lower()
 
     if amount > 0:
-        for kw in CATEGORY_KEYWORDS["Stipendio & Compensi"]:
+        for kw in [*CATEGORY_KEYWORDS["Stipendio & Compensi"], *employer_keywords()]:
             if _matches_keyword(kw, desc_lower):
                 return "Stipendio"
         for kw in CATEGORY_KEYWORDS["Interessi & Rendite"]:
@@ -126,7 +127,7 @@ def classify_transaction(description: str, amount: float) -> str:
     for cat, kws in CATEGORY_KEYWORDS.items():
         if cat in ["Stipendio & Compensi", "Interessi & Rendite"]:
             continue
-        for kw in kws:
+        for kw in [*kws, *extra_keywords(cat)]:
             if _matches_keyword(kw, desc_lower):
                 return cat
 
@@ -480,7 +481,7 @@ def load_configs(data_dir: str = "input") -> Tuple[pd.DataFrame, pd.DataFrame, p
                 "expense_common_std", "expense_common_rho"
             ],
             "value": [
-                3000.0, 655.0, 80.0, 2000.0, 2000.0, 0.0,
+                0.0, 0.0, 100.0, 2000.0, 2000.0, 0.0,
                 0.035, 0.015, 0.05, 0.10, 0.02, 0.12, 0.62, 0.5
             ]
         }

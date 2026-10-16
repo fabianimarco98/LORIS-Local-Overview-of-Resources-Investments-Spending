@@ -373,7 +373,7 @@ class TestPIIScrubberStress(unittest.TestCase):
             "Bonifico a favore di Mario Rossi IBAN IT60X0542811101000000123456 causale affitto",
             "Addebito carta 5167 1234 5678 9010 presso Amazon EU; CF: RSSMRA85M01H501Z",
             "Überweisung an Dr. Johann Wolfgang IBAN AT12 3456 7890 1234 5678 Miete",
-            "Stipendio acme Wien accreditato su conto con codice fiscale VRDLGI90A01F205X",
+            "Stipendio Acme Wien accreditato su conto con codice fiscale VRDLGI90A01F205X",
             "Payment to John Doe email john.doe@example.com phone +43 676 1234567",
         ]
         samples = [dirty_templates[i % len(dirty_templates)] for i in range(5000)]
@@ -397,7 +397,7 @@ class TestPIIScrubberStress(unittest.TestCase):
             "IBAN DE89370400440532013000",
             "iban it60x0542811101000000123456",
             "Carta di credito: 4532-1234-5678-9012",
-            "Email: confidential_phd_student.2026@acme.ac.at",
+            "Email: confidential_student.2026@example.ac.at",
         ]
         for raw in adversarial_cases:
             anon = self.scrubber.anonymize_text(raw)
@@ -414,9 +414,9 @@ class TestLocalLLMAndFallbackStress(unittest.TestCase):
             "Spar Markt Wien 1190", "Billa Corso Kärntner", "Hofer KG Filiale 22",
             "Lidl Austria", "Wiener Linien Jahreskarte", "ÖBB Personenverkehr AG",
             "Uber BV Amsterdam", "Amazon EU S.a.r.l.", "Netflix International B.V.",
-            "Spotify AB", "acme Personalabteilung Gehalt", "Zinsen Trade Republic",
+            "Spotify AB", "Acme Personalabteilung Gehalt", "Zinsen Trade Republic",
             "iShares Core MSCI World ETF Sparplan", "Ristorante Pizzeria da Mario",
-            "Apotheke am acme Campus", "McFIT Wien Gym", "Girokonto Übertrag",
+            "Apotheke am Campus", "McFIT Wien Gym", "Girokonto Übertrag",
             "Bonifico a favore di proprietario Affitto Miete", "Altro acquisto generico"
         ] * 60  # 1.140 movimenti
 

@@ -20,6 +20,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 
+from .user_profile import employer_keywords, owner_names
+
 # Supporto per PDF (pdfplumber e pypdf)
 try:
     import pdfplumber
@@ -394,12 +396,12 @@ class ErsteBankParser(BaseBankParser):
             full_desc = f"{partner} - {btext}".strip(" -")
             p_iban = str(r[iban_col]).strip() if iban_col and not pd.isna(r[iban_col]) else ""
 
-            # Rilevamento stipendio acme o trasferimenti interni
+            # Rilevamento stipendio o trasferimenti interni
             is_internal = False
             cat = "Spesa Generale"
             desc_lower = full_desc.lower()
 
-            if "acme" in desc_lower or "acme university" in desc_lower or "gehalt" in desc_lower:
+            if "gehalt" in desc_lower or any(k in desc_lower for k in employer_keywords()):
                 cat = "Salary"
             elif any(k in desc_lower for k in ["trade republic", "revolut", "girokonto", "übertrag"]):
                 cat = "Giroconto / Trasferimento"
@@ -612,8 +614,9 @@ class DigitalBankParser(BaseBankParser):
                 or any(k in desc_l for k in [
                     "top up", "top-up", "ricarica", "transfer to", "transfer from",
                     "pocket", "vault", "exchanged to", "exchanged from",
-                    "Mario Rossi", "between your accounts", "giroconto",
-                    "trasferimento interno", "internal transfer", "deposit by", "google pay deposit"
+                    "between your accounts", "giroconto",
+                    "trasferimento interno", "internal transfer", "deposit by", "google pay deposit",
+                    *owner_names(),
                 ])
             )
 

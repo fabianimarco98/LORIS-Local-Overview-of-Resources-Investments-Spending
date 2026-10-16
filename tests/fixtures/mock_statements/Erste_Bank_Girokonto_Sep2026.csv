@@ -1,12 +1,12 @@
 Buchungsdatum;Partnername;Partner-IBAN;Betrag;Währung;Buchungstext
-01.09.2026;Billa musterstrasse;AT120000000000000001;-24,41;EUR;Kartenzahlung Supermarkt
+01.09.2026;Billa Musterstrasse;AT120000000000000001;-24,41;EUR;Kartenzahlung Supermarkt
 03.09.2026;Möbelix Wien;AT120000000000000002;-16,99;EUR;Kartenzahlung Scarpiera
 04.09.2026;McFit Wien;AT120000000000000003;-29,90;EUR;Mitgliedsbeitrag Fitness
 04.09.2026;Spusu Telekom;AT120000000000000004;-12,90;EUR;Internet Spusu Monatlich
 05.09.2026;Ikea Wien Nord;AT120000000000000005;-35,43;EUR;Ikea Einrichtung
 08.09.2026;Ikea Wien Nord;AT120000000000000005;-167,98;EUR;Cassettiera e arredo
-14.09.2026;acme Wien;AT880000000000000099;2850,00;EUR;Gehalt acme Dottorato Settembre 2026
+14.09.2026;Acme GmbH;AT880000000000000099;2850,00;EUR;Gehalt Settembre 2026
 15.09.2026;Trade Republic Bank;DE890000000000000500;-500,00;EUR;Girokonto Übertrag Liquidità PAC
 18.09.2026;Maxenergy Gas;AT120000000000000006;-60,00;EUR;Gas Abschlag
 25.09.2026;Restaurant Tokki;AT120000000000000007;-72,40;EUR;Kartenzahlung Abendessen
-30.09.2026;Immobilien musterstrasse;AT110000000000000010;-650,00;EUR;Miete musterstrasse 13
+30.09.2026;Immobilien Musterstrasse;AT110000000000000010;-650,00;EUR;Miete Musterstrasse 13

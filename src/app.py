@@ -7,10 +7,9 @@ from typing import Dict, Any, Optional, List
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import banking
-from banking.anonymizer import PIIScrubber
 from banking.anonymizer import PIIScrubber
 from banking.local_llm import LocalLLMClient, RECOMMENDED_MODELS
 from banking.parsers import parse_bank_statement
@@ -25,8 +24,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -38,7 +38,7 @@ STATEMENTS_DIR = DATA_DIR / "bank_statements"
 
 
 class SimulationRequest(BaseModel):
-    n_sims: int = 5000
+    n_sims: int = Field(5000, ge=1, le=20000)
     start_date: str = "2026-10-01"
     pac: Optional[float] = None
     strategy: str = "dynamic"

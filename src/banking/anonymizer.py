@@ -23,7 +23,7 @@ class PIIScrubber:
 
     # Regex per IBAN europei (SEPA standard)
     IBAN_REGEX = re.compile(
-        r"\b([A-Z]{2}\d{2}[A-Z0-9]{4}[A-Z0-9]{7,26})\b", re.IGNORECASE
+        r"\b([A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}(?:\s?[A-Z0-9]{1,4})?)\b", re.IGNORECASE
     )
 
     # Regex per carte di credito/debito (intere o parzialmente mascherate)
@@ -46,9 +46,14 @@ class PIIScrubber:
         r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
     )
 
-    # Regex per numeri telefonici
+    # Regex per numeri telefonici (solo formato internazionale con "+", per non toccare importi)
     PHONE_REGEX = re.compile(
-        r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b"
+        r"(?<![\w.,])\+\d{1,3}[\s.-]?\d{2,4}(?:[\s.-]?\d{2,4}){2,3}(?!\d)"
+    )
+
+    # BIC/SWIFT solo se preceduto dalla parola chiave (evita di mascherare parole come BONIFICO)
+    BIC_CONTEXT_REGEX = re.compile(
+        r"\b((?:BIC|SWIFT)\s*[:\-]?\s*)([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b"
     )
 
     # Pattern per beneficiari, ordinanti e controparti in causali bancarie
@@ -58,6 +63,7 @@ class PIIScrubber:
         re.compile(r"(?:A\s+FAVORE\s+DI|DISPOSIZIONE\s+DI)\s*[:\-]?\s*([A-Za-z0-9\s.,'&-]{3,35})(?=\s*-\s*|\s*IBAN|\s*BIC|\s*$|;)", re.IGNORECASE),
         re.compile(r"(?:EMPFÄNGER|AUFTRAGGEBER|ZAHLUNGSEMPFÄNGER)\s*[:\-]?\s*([A-Za-z0-9\s.,'&-]{3,35})(?=\s*-\s*|\s*IBAN|\s*BIC|\s*$|;)", re.IGNORECASE),
         re.compile(r"(?:BONIFICO\s+SEPA\s+(?:DA|A))\s*[:\-]?\s*([A-Za-z0-9\s.,'&-]{3,35})(?=\s*-\s*|\s*IBAN|\s*BIC|\s*$|;)", re.IGNORECASE),
+        re.compile(r"\b(?i:to|from|an|von)\s+([A-Z][a-zà-ÿ]+(?:\s+[A-Z][a-zà-ÿ]+){1,2})\b"),
         re.compile(r"(?:RIMBORSO\s+(?:DA|A|PER))\s*[:\-]?\s*([A-Za-z0-9\s.,'&-]{3,30})(?=\s*-\s*|\s*IBAN|\s*BIC|\s*$|;)", re.IGNORECASE),
     ]
 
@@ -131,7 +137,7 @@ class PIIScrubber:
         def _replace_iban(match):
             raw = match.group(0)
             # Verifica minima di verosimiglianza lunghezza IBAN (15-34 caratteri)
-            if 15 <= len(raw) <= 34:
+            if 15 <= len(re.sub(r"\s", "", raw)) <= 34:
                 return self._get_or_create_token(raw, "IBAN")
             return raw
 
@@ -157,6 +163,14 @@ class PIIScrubber:
             return self._get_or_create_token(raw, "EMAIL")
 
         cleaned = self.EMAIL_REGEX.sub(_replace_email, cleaned)
+
+        # 4b. Maschera BIC/SWIFT (con keyword) e telefoni internazionali
+        cleaned = self.BIC_CONTEXT_REGEX.sub(
+            lambda m: m.group(1) + self._get_or_create_token(m.group(2), "BIC"), cleaned
+        )
+        cleaned = self.PHONE_REGEX.sub(
+            lambda m: self._get_or_create_token(m.group(0), "PHONE"), cleaned
+        )
 
         # 5. Maschera Nomi e Controparti nelle causali
         for pattern in self.COUNTERPARTY_PATTERNS:
@@ -198,7 +212,7 @@ class PIIScrubber:
 
         for col in text_columns:
             if col in df_anon.columns:
-                df_anon[col] = df_anon[col].astype(str).apply(self.anonymize_text)
+                df_anon[col] = df_anon[col].fillna("").astype(str).apply(self.anonymize_text)
 
         return df_anon
 
