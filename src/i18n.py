@@ -383,6 +383,26 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "it": "Download in streaming...",
         "en": "Streaming download in progress...",
     },
+    "agent_mode_toggle": {
+        "it": "🧰 Modalità agente (usa strumenti sui tuoi dati)",
+        "en": "🧰 Agent mode (uses tools on your data)",
+    },
+    "agent_mode_help": {
+        "it": "Il modello locale interroga i tuoi dati con strumenti di sola lettura e verifica ogni cifra. Più lento ma più preciso.",
+        "en": "The local model queries your data with read-only tools and checks every figure. Slower but more accurate.",
+    },
+    "agent_working": {
+        "it": "L'agente sta lavorando in locale...",
+        "en": "The agent is working locally...",
+    },
+    "agent_done": {
+        "it": "Ragionamento completato",
+        "en": "Reasoning complete",
+    },
+    "agent_fallback": {
+        "it": "Agente non disponibile, uso la chat standard.",
+        "en": "Agent unavailable, using standard chat.",
+    },
     "chat_placeholder": {
         "it": "Fai una domanda sulle tue finanze (es. 'Qual è la mia spesa più alta?', 'Posso aumentare il mio PAC?')...",
         "en": "Ask a question about your finances (e.g., 'What is my highest expense category?', 'Can I increase my monthly investments?')...",

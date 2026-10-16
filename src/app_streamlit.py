@@ -13,6 +13,8 @@ import streamlit as st
 
 import banking
 from banking.anonymizer import PIIScrubber
+from agents import AgentRuntime, OllamaChat, PortfolioContext, build_portfolio_registry
+from agents.runtime import AgentBackendError
 from banking.local_llm import LocalLLMClient, RECOMMENDED_MODELS
 from banking.portfolio import PortfolioAggregator, PortfolioSummary, ASSET_CLASS_LABELS, ASSET_CLASS_COLORS, get_asset_class_label
 import bank_data_manager as bdm
@@ -1341,6 +1343,10 @@ with tab_ai:
     badge = f"<span class='status-badge badge-green'>Active: {curr_model_name}</span>" if llm_status.is_available else "<span class='status-badge badge-amber'>Deterministic Offline Engine</span>"
     st.markdown(f"**{t('model_selection', lang)}:** {badge}", unsafe_allow_html=True)
 
+    agent_available = llm_status.is_available and llm_status.provider == "ollama"
+    st.toggle(t("agent_mode_toggle", lang), value=agent_available, key="agent_mode",
+              help=t("agent_mode_help", lang), disabled=not agent_available)
+
     # Pulsanti di Analisi Rapida (bilingue)
     col_q1, col_q2, col_q3, col_q4 = st.columns(4)
     quick_query = None
@@ -1400,22 +1406,46 @@ with tab_ai:
             anon_df = scrubber.anonymize_dataframe(df_tx_categorized.tail(30), ["description", "counterparty"]) if not df_tx_categorized.empty else pd.DataFrame()
             cash_yield_val = float(st.session_state.get("custom_cash_rate", 2.5))
 
-            with st.spinner("LORIS analyzing locally..."):
-                stream_res = client.chat_with_llm(
-                    messages=st.session_state.chat_history,
-                    portfolio_summary=summary,
-                    anonymized_transactions=anon_df,
-                    cash_yield_pct=cash_yield_val,
-                    stream=True,
-                )
-
-                if hasattr(stream_res, "__iter__") and not isinstance(stream_res, (str, bytes, dict, list)):
-                    final_text = st.write_stream(stream_res)
-                else:
-                    final_text = str(stream_res)
+            final_text = None
+            if st.session_state.get("agent_mode") and agent_available:
+                try:
+                    runtime = AgentRuntime(
+                        build_portfolio_registry(PortfolioContext(summary, df_tx_categorized, bank_stats, cash_yield_val)),
+                        OllamaChat(client), lang=lang,
+                    )
+                    agent_result = None
+                    with st.status(t("agent_working", lang), expanded=True) as status_box:
+                        for ev in runtime.stream(prompt_to_execute, history=st.session_state.chat_history[:-1]):
+                            if ev.kind == "tool_call":
+                                st.write(f"🔧 `{ev.name}` {ev.args}")
+                            elif ev.kind == "tool_result":
+                                detail = "" if ev.result.ok else f" — {ev.result.error}"
+                                st.caption(f"{'✅' if ev.result.ok else '⚠️'} {ev.name} · {ev.result.elapsed_ms:.0f} ms{detail}")
+                            elif ev.kind == "final":
+                                agent_result = ev.final
+                        status_box.update(label=t("agent_done", lang), state="complete", expanded=False)
+                    final_text = agent_result.answer
                     st.markdown(final_text)
+                except AgentBackendError:
+                    st.warning(t("agent_fallback", lang))
 
-                st.session_state.chat_history.append({"role": "assistant", "content": final_text})
+            if final_text is None:
+                with st.spinner("LORIS analyzing locally..."):
+                    stream_res = client.chat_with_llm(
+                        messages=st.session_state.chat_history,
+                        portfolio_summary=summary,
+                        anonymized_transactions=anon_df,
+                        cash_yield_pct=cash_yield_val,
+                        stream=True,
+                    )
+
+                    if hasattr(stream_res, "__iter__") and not isinstance(stream_res, (str, bytes, dict, list)):
+                        final_text = st.write_stream(stream_res)
+                    else:
+                        final_text = str(stream_res)
+                        st.markdown(final_text)
+
+            st.session_state.chat_history.append({"role": "assistant", "content": final_text})
 
     if st.session_state.chat_history:
         if st.button("🗑️ " + ("Cancella Cronologia" if lang == "it" else "Clear Chat History")):

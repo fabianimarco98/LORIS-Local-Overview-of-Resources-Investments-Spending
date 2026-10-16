@@ -54,7 +54,7 @@ elif [ "$1" == "--api" ]; then
 elif [ "$1" == "--cli" ]; then
     shift
     exec "$PYTHON_EXEC" src/cli.py "$@"
-elif [ "$1" == "status" ] || [ "$1" == "simulate" ] || [ "$1" == "models" ] || [ "$1" == "ask" ]; then
+elif [ "$1" == "status" ] || [ "$1" == "simulate" ] || [ "$1" == "models" ] || [ "$1" == "ask" ] || [ "$1" == "agent" ]; then
     exec "$PYTHON_EXEC" src/cli.py "$@"
 elif [ "$1" == "--browser" ]; then
     PORT=8502

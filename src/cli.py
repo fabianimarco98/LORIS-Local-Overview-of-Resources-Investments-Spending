@@ -191,6 +191,39 @@ def cmd_ask(args):
     print("=" * 70)
 
 
+def cmd_agent(args):
+    from agents import AgentRuntime, OllamaChat, PortfolioContext, build_portfolio_registry
+    from agents.runtime import AgentBackendError
+    lang = getattr(args, "lang", "it")
+    print("=" * 70)
+    print(" 🤖 LORIS — LOCAL AGENT (read-only tools, 100% offline)")
+    print("=" * 70)
+    _, summary = bdm.load_all_bank_statements(str(STATEMENTS_DIR))
+    ctx = PortfolioContext.from_summary(summary)
+    try:
+        backend = OllamaChat(LocalLLMClient(preferred_model=args.model), timeout_s=args.timeout)
+    except AgentBackendError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
+    print(f"🟢 Model: {backend.model}\n❓ {args.question}\n")
+    runtime = AgentRuntime(build_portfolio_registry(ctx), backend, lang=lang, max_steps=args.max_steps)
+    try:
+        for ev in runtime.stream(args.question):
+            if args.trace and ev.kind == "tool_call":
+                print(f"  🔧 {ev.name}({ev.args})")
+            elif args.trace and ev.kind == "tool_result":
+                print(f"  {'✅' if ev.result.ok else '⚠️'} {ev.name} {ev.result.elapsed_ms:.0f} ms {ev.result.error or ''}")
+            elif ev.kind == "final":
+                r = ev.final
+                print("-" * 70)
+                print(r.answer)
+                print("-" * 70)
+                print(f"⏱ {r.elapsed_s:.1f}s · {len(r.tool_calls)} tool · {r.stopped_reason}")
+    except AgentBackendError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
+
+
 def cmd_models(args):
     print("=" * 70)
     print(" 🤖 LOCAL AI MODEL MANAGEMENT (OLLAMA / LLAMA.CPP)")
@@ -291,6 +324,15 @@ def main():
     p_ask.add_argument("question", type=str, help="Question for the AI")
     p_ask.add_argument("--model", type=str, help="Local model tag (e.g. llama3.2:3b)")
     p_ask.set_defaults(func=cmd_ask)
+
+    # Agent
+    p_agent = subparsers.add_parser("agent", parents=[parent_parser], help="Ask the local tool-using agent (read-only)")
+    p_agent.add_argument("question", type=str, help="Question for the agent")
+    p_agent.add_argument("--model", type=str, help="Local model tag")
+    p_agent.add_argument("--trace", action="store_true", help="Show tool calls")
+    p_agent.add_argument("--max-steps", type=int, default=6)
+    p_agent.add_argument("--timeout", type=float, default=300.0)
+    p_agent.set_defaults(func=cmd_agent)
 
     # Models
     p_models = subparsers.add_parser("models", parents=[parent_parser], help="Manage and install local AI models")

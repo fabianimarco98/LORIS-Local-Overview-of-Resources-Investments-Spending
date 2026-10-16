@@ -109,6 +109,18 @@ python src/build_macos_app.py
 
 ---
 
+## 🤖 Local AI Agent / Agente AI Locale
+
+LORIS include un agente che usa il modello Ollama **in locale** con strumenti di **sola lettura** sui tuoi dati
+(`src/agents/`). Il modello decide quali strumenti chiamare (riepilogo patrimonio, cashflow mensile, spese per categoria,
+ricerca transazioni anonimizzate, spese ricorrenti, autonomia, PAC, previsione Monte Carlo), gli argomenti vengono validati
+e ogni importo in € della risposta è confrontato con i numeri restituiti dagli strumenti (⚠️ se non verificabile).
+
+- **App**: tab *AI Advisor* → interruttore "Modalità agente" (mostra gli strumenti usati passo per passo).
+- **CLI**: `./run_app.sh agent "Dove spendo di più a settembre 2026?" --trace`
+- **Sicurezza**: endpoint solo localhost, nessuno strumento scrive su disco o in rete, massimo 6 passi / 10 chiamate.
+- **Estendere**: aggiungi un `Tool(...)` in `src/agents/tools.py` (schema JSON + funzione pura sul `PortfolioContext`).
+
 ## 📁 Clean Project Structure / Struttura Progetto
 
 ```

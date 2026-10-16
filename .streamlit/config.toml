@@ -5,7 +5,7 @@ gatherUsageStats = false
 headless = true
 address = "localhost"
 port = 8502
-enableCORS = false
+enableCORS = true
 enableXsrfProtection = true
 
 [theme]
