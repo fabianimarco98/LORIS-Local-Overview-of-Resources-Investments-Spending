@@ -13,6 +13,7 @@ from banking.anonymizer import PIIScrubber
 from banking.local_llm import LocalLLMClient, RECOMMENDED_MODELS
 from banking.portfolio import ASSET_CLASS_LABELS, get_asset_class_label
 import bank_data_manager as bdm
+import loris_service as svc
 import simulation_engine as se
 from i18n import t, get_category_translation
 
@@ -26,7 +27,8 @@ def cmd_status(args):
     print("=" * 70)
     print(" 🐾 LORIS — Local Overview of Resources, Investments & Spending")
     print("=" * 70)
-    statements, summary = bdm.load_all_bank_statements(str(STATEMENTS_DIR), as_of_date=args.as_of)
+    _data = svc.load_portfolio(as_of_date=args.as_of)
+    statements, summary = _data.statements, _data.summary
     print(f"📁 {t('loaded_accounts', lang)}: {len(statements)}")
     if len(statements) == 0:
         if lang == "it":
@@ -68,9 +70,10 @@ def cmd_analyze(args):
     print("=" * 70)
     print(f" 📊 {t('historical_title', lang).upper()}")
     print("=" * 70)
-    _, summary = bdm.load_all_bank_statements(str(STATEMENTS_DIR))
-    df_cat = bdm.categorize_transactions(summary.all_transactions, summary.internal_transfers)
-    stats = bdm.compute_bank_monthly_statistics(df_cat)
+    _data = svc.load_portfolio()
+    summary = _data.summary
+    df_cat = _data.df_tx
+    stats = _data.stats
 
     if summary.all_transactions.empty:
         print(t("no_statements_found", lang))
@@ -111,9 +114,10 @@ def cmd_simulate(args):
     print("=" * 70)
     print(f" 🎲 {t('forecast_title', lang).upper()} ({args.n_sims:,} SCENARIOS — {horizon} " + ("MESI" if lang == "it" else "MONTHS") + ")")
     print("=" * 70)
-    _, summary = bdm.load_all_bank_statements(str(STATEMENTS_DIR))
-    df_cat = bdm.categorize_transactions(summary.all_transactions, summary.internal_transfers)
-    stats = bdm.compute_bank_monthly_statistics(df_cat)
+    _data = svc.load_portfolio()
+    summary = _data.summary
+    df_cat = _data.df_tx
+    stats = _data.stats
 
     if summary.all_transactions.empty:
         if lang == "it":
@@ -137,21 +141,16 @@ def cmd_simulate(args):
     print(f"  • {t('starting_investments', lang)}: € {starting_inv:,.2f}")
     print(f"  • {t('expected_monthly_income', lang)}:     € {emp_salary:,.2f}/" + ("mese" if lang == "it" else "month"))
     print(f"  • {t('monthly_burn_rate', lang)}:           € {emp_burn_mean:,.2f}/" + ("mese" if lang == "it" else "month") + f" (std: €{emp_burn_std:,.2f})")
-    print(f"  • {t('monthly_pac', lang)}:                 € {args.pac or 100.0:,.2f}")
+    print(f"  • {t('monthly_pac', lang)}:                 € {args.pac if args.pac is not None else svc.FORECAST_DEFAULTS['monthly_investment']:,.2f}")
     print(f"  • {t('horizon_months', lang)}:              {horizon} " + ("mesi" if lang == "it" else "months"))
 
-    res = se.run_simulation(
-        start="2026-10-01",
+    res = svc.run_forecast(
+        _data,
         horizon_months=horizon,
         n_sims=args.n_sims,
-        pac=args.pac or 100.0,
+        monthly_investment=args.pac if args.pac is not None else None,
         starting_cash=starting_cash,
         starting_inv=starting_inv,
-        monthly_income=emp_salary,
-        recurring_df=None,
-        shocks_df=None,
-        monthly_expenses_mean=emp_burn_mean,
-        monthly_expenses_std=emp_burn_std,
     )
 
     print("-" * 70)
@@ -171,11 +170,12 @@ def cmd_ask(args):
     print("=" * 70)
     print(" 🐾 LORIS — LOCAL AI QUERY (ZERO-KNOWLEDGE)")
     print("=" * 70)
-    _, summary = bdm.load_all_bank_statements(str(STATEMENTS_DIR))
-    df = bdm.categorize_transactions(summary.all_transactions, summary.internal_transfers)
+    _data = svc.load_portfolio()
+    summary = _data.summary
+    df = _data.df_tx
 
     scrubber = PIIScrubber()
-    anon_df = scrubber.anonymize_dataframe(df.head(40), ["description"]) if not df.empty else pd.DataFrame()
+    anon_df = scrubber.anonymize_dataframe(df.tail(40), ["description", "counterparty"]) if not df.empty else pd.DataFrame()
 
     llm = LocalLLMClient(preferred_model=args.model)
     status = llm.check_health()
@@ -198,8 +198,9 @@ def cmd_agent(args):
     print("=" * 70)
     print(" 🤖 LORIS — LOCAL AGENT (read-only tools, 100% offline)")
     print("=" * 70)
-    _, summary = bdm.load_all_bank_statements(str(STATEMENTS_DIR))
-    ctx = PortfolioContext.from_summary(summary)
+    _data = svc.load_portfolio()
+    summary = _data.summary
+    ctx = PortfolioContext(_data.summary, _data.df_tx, _data.stats)
     try:
         backend = OllamaChat(LocalLLMClient(preferred_model=args.model), timeout_s=args.timeout)
     except AgentBackendError as e:

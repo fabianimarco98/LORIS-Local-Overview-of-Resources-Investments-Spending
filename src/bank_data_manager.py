@@ -196,6 +196,17 @@ def categorize_transactions(
     df.loc[mask_already_internal, "is_internal_transfer"] = True
     df.loc[mask_already_internal, "category"] = "Giroconto Interno"
 
+    # La scelta esplicita dell'utente (giroconto sì/no) vince su parser e rilevamento automatico
+    user_flag = None
+    if "user_transfer_flag" in df.columns:
+        user_flag = df["user_transfer_flag"]
+        forced_off = user_flag.map(lambda v: v is False)
+        forced_on = user_flag.map(lambda v: v is True)
+        df.loc[forced_off, "is_internal_transfer"] = False
+        df.loc[forced_off & (df["category"] == "Giroconto Interno"), "category"] = "Da Classificare"
+        df.loc[forced_on, "is_internal_transfer"] = True
+        df.loc[forced_on, "category"] = "Giroconto Interno"
+
     # Classifica il resto
     for idx, row in df.iterrows():
         if df.loc[idx, "is_internal_transfer"]:
@@ -304,7 +315,7 @@ def compute_bank_monthly_statistics(
     std_exp = float(trimmed_deb.std()) if len(trimmed_deb) > 1 else 0.0
 
     # Rilevamento Stipendio / Flussi regolari di reddito
-    salary_tx = credits[credits["category"] == "Stipendio"]
+    salary_tx = credits[credits["category"].isin(["Stipendio", "Stipendio & Compensi"])]
     if not salary_tx.empty:
         detected_salary = float(salary_tx["amount"].median())
     else:
@@ -674,6 +685,8 @@ def apply_user_overrides(
         if excluded_keys:
             df_all = df_all[~df_all["tx_key"].isin(excluded_keys)].copy()
 
+        # user_transfer_flag: True/False deciso dall'utente (NaN = nessuna scelta); vince sempre sul rilevamento automatico
+        df_all["user_transfer_flag"] = df_all["tx_key"].map(lambda k: bool(tr_flags[k]) if k in tr_flags else np.nan).astype(object)
         for idx, r in df_all.iterrows():
             k = r["tx_key"]
             if k in cat_overrides:
@@ -684,7 +697,24 @@ def apply_user_overrides(
     # 5. Ricalcolo PortfolioAggregator con i nuovi saldi e transazioni
     agg = PortfolioAggregator(statements)
     new_summary = agg.aggregate()
+
+    # Le colonne asset_class / is_tracker (aggiunte dall'aggregatore) servono a viste e wallet: ripristinale
+    if not df_all.empty and not new_summary.accounts_summary.empty:
+        acc = new_summary.accounts_summary.set_index("account_id")
+        df_all["asset_class"] = df_all["account_id"].map(acc["asset_class"]).fillna("LIQUID_CASH")
+        df_all["is_tracker"] = df_all["account_id"].map(acc["is_tracker"]).fillna(False).astype(bool)
+    if not df_all.empty:
+        if "is_internal_transfer" not in df_all.columns:
+            df_all["is_internal_transfer"] = False
+        df_all["is_internal_transfer"] = df_all["is_internal_transfer"].fillna(False).astype(bool)
     new_summary.all_transactions = df_all
+
+    # Spesa media e cuscinetto devono riflettere esclusioni, categorie, giroconti e movimenti manuali dell'utente
+    df_for_burn = categorize_transactions(df_all, new_summary.internal_transfers) if not df_all.empty else df_all
+    burn = agg._compute_burn_rate(df_for_burn)
+    cash = new_summary.total_liquid_cash + new_summary.total_high_yield_cash
+    new_summary.monthly_burn_rate = round(burn, 2)
+    new_summary.liquidity_buffer_months = round(max(0.0, cash / burn), 1) if burn > 0 else 0.0
     new_summary.load_warnings = list(getattr(summary, "load_warnings", []))
 
     return statements, new_summary

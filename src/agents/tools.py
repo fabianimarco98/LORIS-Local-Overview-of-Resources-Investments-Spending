@@ -344,27 +344,21 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
         horizon_months: int = 24, n_sims: int = 1000, monthly_investment: float = 100.0,
         annual_return_pct: float = 5.0, annual_inflation_pct: float = 2.5,
     ) -> Dict[str, Any]:
-        import simulation_engine as se
-        start = (pd.Timestamp.today().normalize() + pd.offsets.MonthBegin(1)).strftime("%Y-%m-%d")
-        starting_cash = float(s.total_liquid_cash + s.total_high_yield_cash)
-        res = se.run_simulation(
-            start=start, horizon_months=horizon_months, n_sims=n_sims, seed=42,
-            pac=monthly_investment, strategy="dynamic", cash_threshold=5000.0,
-            monthly_income=float(ctx.stats.get("detected_salary", 0.0)),
-            starting_cash=starting_cash, starting_inv=float(s.total_investments),
-            cash_rate=ctx.cash_rate_pct / 100.0,
-            mkt_mean=annual_return_pct / 100.0, infl_mean=annual_inflation_pct / 100.0,
-            monthly_expenses_mean=float(ctx.stats.get("monthly_expenses_mean", 0.0)),
-            monthly_expenses_std=float(ctx.stats.get("monthly_expenses_std", 0.0)),
-            tax_rate=0.26,
+        import loris_service as svc
+        data = svc.PortfolioData([], s, ctx.df_tx, ctx.stats)
+        res = svc.run_forecast(
+            data, horizon_months=horizon_months, n_sims=n_sims, monthly_investment=monthly_investment,
+            annual_return_pct=annual_return_pct, annual_inflation_pct=annual_inflation_pct,
+            cash_rate_pct=ctx.cash_rate_pct,
         )
+        prm = res["params"]
         return {
             "assumptions": {
-                "start": start, "horizon_months": horizon_months, "n_sims": n_sims,
-                "starting_cash": starting_cash, "starting_investments": float(s.total_investments),
+                "start": str(res["start"])[:10], "horizon_months": res["months"], "n_sims": n_sims,
+                "starting_cash": data.cash, "starting_investments": float(s.total_investments),
                 "monthly_income": float(ctx.stats.get("detected_salary", 0.0)),
                 "monthly_expenses_mean": float(ctx.stats.get("monthly_expenses_mean", 0.0)),
-                "monthly_investment": monthly_investment, "annual_return_pct": annual_return_pct,
+                "monthly_investment": prm["monthly_investment"], "annual_return_pct": prm["annual_return_pct"],
             },
             "net_worth_p5_pessimistic": res["p5"],
             "net_worth_p50_median": res["p50"],

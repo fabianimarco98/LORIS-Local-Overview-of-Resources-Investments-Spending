@@ -18,6 +18,7 @@ from agents.runtime import AgentBackendError
 from banking.local_llm import LocalLLMClient, RECOMMENDED_MODELS
 from banking.portfolio import PortfolioAggregator, PortfolioSummary, ASSET_CLASS_LABELS, ASSET_CLASS_COLORS, get_asset_class_label
 import bank_data_manager as bdm
+import loris_service as svc
 import simulation_engine as se
 from i18n import t, get_category_translation, AVAILABLE_LANGUAGES
 
@@ -1205,23 +1206,19 @@ with tab_sim:
 
     # Esecuzione simulazione Monte Carlo generalizzata
     current_cash_rate = float(st.session_state.get("custom_cash_rate", 2.5)) / 100.0
-    sim_res = se.run_simulation(
-        start="2026-10-01",
+    sim_res = svc.run_forecast(
+        svc.build_portfolio_data(statements, summary),
         horizon_months=horizon_sel,
         n_sims=sim_paths,
-        seed=42,
-        pac=user_pac,
-        strategy="dynamic",
-        cash_threshold=5000.0,
+        monthly_investment=user_pac,
         monthly_income=user_income,
         starting_cash=starting_cash_val,
         starting_inv=starting_inv_val,
-        cash_rate=current_cash_rate,
-        mkt_mean=user_mkt_return,
-        infl_mean=user_inflation,
+        cash_rate_pct=current_cash_rate * 100.0,
+        annual_return_pct=user_mkt_return * 100.0,
+        annual_inflation_pct=user_inflation * 100.0,
         monthly_expenses_mean=user_burn,
         monthly_expenses_std=user_vol,
-        tax_rate=0.26,
     )
 
     # Indicatori Risultati
@@ -1240,7 +1237,7 @@ with tab_sim:
 
     # Fan Chart Patrimonio Netto
     months_axis = [d.strftime("%b %Y") for d in sim_res["dates"]]
-    total_wealth_history = sim_res["cash_history"] + sim_res["invest_history"]
+    total_wealth_history = sim_res.get("nw_history", sim_res["cash_history"] + sim_res["invest_history"])
 
     p05 = np.percentile(total_wealth_history, 5, axis=0)
     p25 = np.percentile(total_wealth_history, 25, axis=0)

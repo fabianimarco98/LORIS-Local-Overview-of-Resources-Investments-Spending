@@ -60,3 +60,97 @@ class TestSpendingDefinition(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUserOverridesAreEffective(unittest.TestCase):
+    def setUp(self):
+        import bank_data_manager as bdm
+        self.bdm = bdm
+        rows = full_months(100) + [("2026-06-10", -500.0, "Bonifico a TR", {})]
+        self.statements = [stmt("A", rows, balance=5000.0)]
+
+    def _apply(self, overrides):
+        agg = PortfolioAggregator(self.statements)
+        summary = agg.aggregate()
+        base = {"balance_overrides": {}, "category_overrides": {}, "transfer_flags": {},
+                "excluded_transactions": [], "manual_transactions": []}
+        base.update(overrides)
+        return self.bdm.apply_user_overrides(self.statements, summary, base)[1]
+
+    def test_excluding_a_transaction_lowers_burn_rate(self):
+        before = self._apply({})
+        key = self.bdm.make_tx_key(pd.Timestamp("2026-06-10"), "A", -500.0, "Bonifico a TR")
+        after = self._apply({"excluded_transactions": [key]})
+        self.assertLess(after.monthly_burn_rate, before.monthly_burn_rate)
+        self.assertAlmostEqual(after.monthly_burn_rate, 101.0, places=1)
+
+    def test_marking_transfer_removes_it_from_spending_and_stats(self):
+        key = self.bdm.make_tx_key(pd.Timestamp("2026-06-10"), "A", -500.0, "Bonifico a TR")
+        s = self._apply({"transfer_flags": {key: True}})
+        self.assertAlmostEqual(s.monthly_burn_rate, 101.0, places=1)
+        cat = self.bdm.categorize_transactions(s.all_transactions, s.internal_transfers)
+        row = cat[cat["amount"] == -500.0].iloc[0]
+        self.assertTrue(row["is_internal_transfer"])
+
+    def test_unflagging_an_autodetected_transfer_sticks(self):
+        a = stmt("A", full_months(100) + [("2026-06-10", -500.0, "Bonifico a TR", {})])
+        b = stmt("B", [("2026-06-10", 500.0, "Bonifico da Erste", {})])
+        self.statements = [a, b]
+        summary = PortfolioAggregator(self.statements).aggregate()
+        self.assertEqual(len(summary.internal_transfers), 1)
+        key = self.bdm.make_tx_key(pd.Timestamp("2026-06-10"), "A", -500.0, "Bonifico a TR")
+        s = self._apply({"transfer_flags": {key: False}})
+        cat = self.bdm.categorize_transactions(s.all_transactions, s.internal_transfers)
+        self.assertFalse(cat[cat["amount"] == -500.0].iloc[0]["is_internal_transfer"])
+
+    def test_overridden_summary_keeps_asset_class_and_tracker_columns(self):
+        s = self._apply({})
+        self.assertIn("asset_class", s.all_transactions.columns)
+        self.assertIn("is_tracker", s.all_transactions.columns)
+
+    def test_manual_transaction_counts_in_burn(self):
+        manual = [{"date": "2026-06-15", "amount": -400.0, "description": "Spesa manuale", "category": "Altre Spese",
+                   "account_id": "A", "institution": "A"}]
+        s = self._apply({"manual_transactions": manual, "transfer_flags": {}, "excluded_transactions":
+                         [self.bdm.make_tx_key(pd.Timestamp("2026-06-10"), "A", -500.0, "Bonifico a TR")]})
+        self.assertAlmostEqual(s.monthly_burn_rate, (101 * 3 + 400) / 3, places=0)
+
+
+class TestSimulationFixes(unittest.TestCase):
+    def setUp(self):
+        import numpy as np
+        import simulation_engine as se
+        self.np, self.se = np, se
+
+    def _run(self, **kw):
+        base = dict(start="2026-10-01", horizon_months=6, n_sims=300, seed=1, monthly_income=0.0,
+                    infl_mean=0.0, infl_std=0.0, mkt_std=0.0, mkt_mean=0.0, cash_rate=0.0)
+        base.update(kw)
+        return self.se.run_simulation(**base)
+
+    def test_empirical_volatility_is_not_inflated_by_common_shock(self):
+        res = self._run(pac=0.0, starting_cash=10000.0, starting_inv=0.0,
+                        monthly_expenses_mean=1000.0, monthly_expenses_std=0.0)
+        self.assertAlmostEqual(float(self.np.std(res["expenses"][:, 0])), 0.0, places=6)
+
+    def test_forced_sale_covers_shortfall_after_tax(self):
+        res = self._run(pac=0.0, starting_cash=0.0, starting_inv=10000.0, tax_rate=0.26,
+                        monthly_expenses_mean=500.0, monthly_expenses_std=0.0)
+        self.assertGreaterEqual(float(res["cash_history"].min()), -1e-6)
+
+    def test_pac_is_skipped_without_cash(self):
+        res = self._run(pac=100.0, starting_cash=50.0, starting_inv=0.0,
+                        monthly_expenses_mean=0.0, monthly_expenses_std=0.0)
+        self.assertAlmostEqual(float(res["invest_history"].max()), 0.0)
+        self.assertAlmostEqual(float(res["cash_history"][0, -1]), 50.0)
+
+    def test_after_tax_history_matches_final_wealth(self):
+        res = self._run(pac=100.0, starting_cash=5000.0, starting_inv=1000.0, mkt_mean=0.08,
+                        monthly_expenses_mean=300.0, monthly_expenses_std=0.0)
+        self.np.testing.assert_allclose(res["nw_history"][:, -1], res["nw_final"], rtol=1e-9)
+
+    def test_default_start_is_first_of_next_month(self):
+        import pandas as pd
+        d = pd.Timestamp(self.se.default_start())
+        self.assertEqual(d.day, 1)
+        self.assertGreater(d, pd.Timestamp.today().normalize())

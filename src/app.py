@@ -14,6 +14,7 @@ from banking.anonymizer import PIIScrubber
 from banking.local_llm import LocalLLMClient, RECOMMENDED_MODELS
 from banking.parsers import parse_bank_statement
 import bank_data_manager as bdm
+import loris_service as svc
 import simulation_engine as se
 
 app = FastAPI(
@@ -39,7 +40,7 @@ STATEMENTS_DIR = DATA_DIR / "bank_statements"
 
 class SimulationRequest(BaseModel):
     n_sims: int = Field(5000, ge=1, le=20000)
-    start_date: str = "2026-10-01"
+    start_date: Optional[str] = None
     pac: Optional[float] = None
     strategy: str = "dynamic"
     starting_cash: Optional[float] = None
@@ -76,7 +77,8 @@ def health():
 
 @app.get("/api/portfolio")
 def get_portfolio(as_of: Optional[str] = None):
-    _, summary = bdm.load_all_bank_statements(statements_dir=str(STATEMENTS_DIR), as_of_date=as_of)
+    _data = svc.load_portfolio(as_of_date=as_of)
+    summary = _data.summary
     return {
         "total_net_worth": summary.total_net_worth,
         "total_liquid_cash": summary.total_liquid_cash,
@@ -100,8 +102,9 @@ def get_transactions(
     category: Optional[str] = None,
     anonymize: bool = False,
 ):
-    _, summary = bdm.load_all_bank_statements(statements_dir=str(STATEMENTS_DIR))
-    df = bdm.categorize_transactions(summary.all_transactions, summary.internal_transfers)
+    _data = svc.load_portfolio()
+    summary = _data.summary
+    df = _data.df_tx
 
     if df.empty:
         return {"total": 0, "transactions": []}
@@ -128,29 +131,20 @@ def get_transactions(
 
 @app.post("/api/simulate")
 def run_simulation(req: SimulationRequest):
-    _, summary = bdm.load_all_bank_statements(statements_dir=str(STATEMENTS_DIR))
-    df_cat = bdm.categorize_transactions(summary.all_transactions, summary.internal_transfers)
-    stats = bdm.compute_bank_monthly_statistics(df_cat)
+    _data = svc.load_portfolio()
+    summary = _data.summary
+    df_cat = _data.df_tx
+    stats = _data.stats
 
-    sc = req.starting_cash if req.starting_cash is not None else summary.recommended_starting_cash
-    si = req.starting_inv if req.starting_inv is not None else summary.total_investments
-    emp_salary = stats.get("detected_salary", 0.0)
-    emp_burn_mean = stats.get("monthly_expenses_mean", 0.0)
-    emp_burn_std = stats.get("monthly_expenses_std", 0.0)
-
-    res = se.run_simulation(
+    res = svc.run_forecast(
+        _data,
         start=req.start_date,
         n_sims=req.n_sims,
-        pac=req.pac,
+        monthly_investment=req.pac,
         strategy=req.strategy,
-        starting_cash=sc,
-        starting_inv=si,
-        salary1=emp_salary,
+        starting_cash=req.starting_cash,
+        starting_inv=req.starting_inv,
         shock_scale=req.shock_scale,
-        recurring_df=None,
-        shocks_df=None,
-        monthly_expenses_mean=emp_burn_mean,
-        monthly_expenses_std=emp_burn_std,
     )
 
     tot_wealth = res["cash_history"] + res["invest_history"]
@@ -173,8 +167,9 @@ def run_simulation(req: SimulationRequest):
 
 @app.post("/api/llm/query")
 def query_llm(req: LLMQueryRequest):
-    _, summary = bdm.load_all_bank_statements(statements_dir=str(STATEMENTS_DIR))
-    df = bdm.categorize_transactions(summary.all_transactions, summary.internal_transfers)
+    _data = svc.load_portfolio()
+    summary = _data.summary
+    df = _data.df_tx
 
     scrubber = PIIScrubber()
     anon_df = scrubber.anonymize_dataframe(df.head(req.top_n_tx), ["description"]) if not df.empty else pd.DataFrame()

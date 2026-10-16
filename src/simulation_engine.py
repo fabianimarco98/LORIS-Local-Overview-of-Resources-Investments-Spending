@@ -37,8 +37,13 @@ def sim_months(start: Union[str, pd.Timestamp], end: Optional[Union[str, pd.Time
     return max(1, m)
 
 
+def default_start() -> str:
+    """Primo giorno del mese successivo a oggi (data di partenza di default delle proiezioni)."""
+    return (pd.Timestamp.today().normalize() + pd.offsets.MonthBegin(1)).strftime("%Y-%m-%d")
+
+
 def run_simulation(
-    start: Union[str, pd.Timestamp] = "2026-10-01",
+    start: Optional[Union[str, pd.Timestamp]] = None,
     horizon_months: Optional[int] = None,
     end_date: Optional[Union[str, pd.Timestamp]] = None,
     n_sims: int = 5000,
@@ -78,7 +83,7 @@ def run_simulation(
     Esegue la simulazione Monte Carlo su N scenari per l'orizzonte temporale specificato.
     Accetta parametri derivati empiricamente dagli estratti conto o configurazioni custom.
     """
-    start_dt = pd.to_datetime(start)
+    start_dt = pd.to_datetime(start if start is not None else default_start())
 
     # 1. Determinazione orizzonte temporale in mesi
     if horizon_months is not None and horizon_months > 0:
@@ -111,7 +116,7 @@ def run_simulation(
     else:
         inc_base = float(P.get("salary_phase_1", 2000.0))
         sal2 = float(P.get("salary_phase_2", 2000.0 if "salary_phase_2" in P else inc_base) if salary2 is None else salary2)
-        extra1 = float(P.get("salary_phase_1_extra", 0.0 if macro_df is None else 1070.0) if extra_phase1 is None else extra_phase1)
+        extra1 = float(P.get("salary_phase_1_extra", 0.0) if extra_phase1 is None else extra_phase1)
         extra2 = float(P.get("salary_phase_2_extra", 0.0 if macro_df is None else 0.0) if extra_phase2 is None else extra_phase2)
 
     infl_mean = float(P.get("annual_inflation_mean", 0.025) if infl_mean is None else infl_mean)
@@ -124,7 +129,10 @@ def run_simulation(
     cash_rate = float(P.get("cash_interest_gross", 0.015) if cash_rate is None else cash_rate)
     eff_tax_rate = float(P.get("capital_gains_tax", DEFAULT_TAX_RATE) if tax_rate is None else tax_rate)
 
-    exp_common_std = float(P.get("expense_common_std", 0.40) if expense_common_std is None else expense_common_std)
+    # Con volatilità empirica (monthly_expenses_std dagli estratti) lo shock comune è già incluso nella std osservata:
+    # applicarlo di nuovo gonfierebbe rischio e probabilità di esaurire la cassa.
+    _empirical_vol = (recurring_df is None or recurring_df.empty) and monthly_expenses_std is not None
+    exp_common_std = float(P.get("expense_common_std", 0.0 if _empirical_vol else 0.40) if expense_common_std is None else expense_common_std)
     exp_common_rho = float(P.get("expense_common_rho", 0.45) if expense_common_rho is None else expense_common_rho)
     overdraft_rate = float(P.get("overdraft_rate_annual", 0.10) if overdraft_rate is None else overdraft_rate)
 
@@ -155,6 +163,7 @@ def run_simulation(
     exp_h = np.zeros((n_sims, months))
     int_h = np.zeros((n_sims, months))
     liq_h = np.zeros((n_sims, months))
+    cb_h = np.zeros((n_sims, months))
     income_sched = np.zeros(months)
 
     price_level = 1.0
@@ -205,9 +214,10 @@ def run_simulation(
         cash = cash + inc
 
         # 5. PAC (Piano di Accumulo Capitale)
-        cash = cash - pac
-        invest = invest * (1 + mret) + pac
-        cost_basis = cost_basis + pac
+        pac_m = np.where(cash >= pac, pac, 0.0)   # non si investe denaro che non c'è
+        cash = cash - pac_m
+        invest = invest * (1 + mret) + pac_m
+        cost_basis = cost_basis + pac_m
 
         # 6. Spese del mese
         eps = rng.normal(0, innov_std, n_sims)
@@ -244,16 +254,15 @@ def run_simulation(
             invest = invest + extra_inv
             cost_basis = cost_basis + extra_inv
 
-        # 9. Liquidazione forzata se cash < 0
+        # 9. Liquidazione forzata se cash < 0: si vende abbastanza da coprire il fabbisogno AL NETTO delle imposte
         need = np.clip(-cash, 0, None)
-        sell = np.minimum(need, invest)
+        gain_frac = np.divide(invest - cost_basis, invest, out=np.zeros_like(invest), where=invest > 0)
+        gain_frac = np.clip(gain_frac, 0.0, 1.0)
+        net_per_unit = 1.0 - gain_frac * eff_tax_rate          # incasso netto per ogni € venduto
+        sell = np.minimum(need / np.maximum(net_per_unit, 1e-6), invest)
         do_sell = sell > 0
         if do_sell.any():
-            gain_frac = np.divide(invest - cost_basis, invest,
-                                  out=np.zeros_like(invest), where=invest > 0)
-            gain_frac = np.clip(gain_frac, 0, None)
-            realized_gain = sell * gain_frac
-            tax = realized_gain * eff_tax_rate
+            tax = sell * gain_frac * eff_tax_rate
             proceeds = sell - tax
             frac_sold = np.divide(sell, invest, out=np.zeros_like(invest), where=invest > 0)
             cash = cash + proceeds
@@ -263,6 +272,7 @@ def run_simulation(
         liq_h[:, m] = sell
         cash_h[:, m] = cash
         inv_h[:, m] = invest
+        cb_h[:, m] = cost_basis
         exp_h[:, m] = exp
 
     gains = np.maximum(0, invest - cost_basis)
@@ -283,6 +293,7 @@ def run_simulation(
         "cash_history": cash_h,
         "invest_history": inv_h,
         "total_wealth_history": cash_h + inv_h,
+        "nw_history": cash_h + inv_h - np.maximum(0.0, inv_h - cb_h) * eff_tax_rate,   # al netto delle imposte latenti
         "liquidated": liq_h,
         "income": income_sched,
         "nw": cash_h + inv_h,
