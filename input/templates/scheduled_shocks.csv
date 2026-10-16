@@ -1,0 +1,8 @@
+date,amount,description,tag
+2027-01,500,Abbonamento trasporti annuale,abbonamento
+2027-04,300,Visite mediche / dentista,salute
+2027-08,1500,Vacanza estiva,viaggio
+2027-12,250,Regali di Natale,viaggio
+2028-03,600,Elettronica nuova,tech
+2028-08,1500,Vacanza estiva,viaggio
+2028-12,-1000,Rimborso cauzione,cauzione
