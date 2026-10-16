@@ -53,6 +53,22 @@ class BankStatement:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
+def _decode_text(data: bytes) -> str:
+    """Decodifica robusta di file testuali bancari: BOM UTF-16/UTF-8, UTF-8, ripiego su cp1252 (Windows/Excel)."""
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return data.decode("utf-16", errors="replace")
+    if data[:3] == b"\xef\xbb\xbf":
+        return data[3:].decode("utf-8", errors="replace")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        # Campione troncato a metà carattere: il resto è UTF-8 valido
+        if e.start >= len(data) - 4:
+            return data.decode("utf-8", errors="ignore")
+        return data.decode("cp1252", errors="replace")
+
+
+
 def clean_numeric_amount(val: Any) -> float:
     """
     Converte importi da formati europei (es. '-1.250,50 €', '1.250,50-', '150,00 S')
@@ -63,7 +79,7 @@ def clean_numeric_amount(val: Any) -> float:
     if isinstance(val, (int, float)):
         return float(val)
 
-    s = str(val).strip()
+    s = str(val).strip().replace("\u2212", "-").replace("\u2013", "-").replace("\u2014", "-")
     if not s:
         return 0.0
 
@@ -101,9 +117,12 @@ def clean_numeric_amount(val: Any) -> float:
         else:
             # Formato anglosassone: 1,250.50 -> 1250.50
             s_digits = s_digits.replace(",", "")
-    elif "," in s_digits:
-        # Solo virgola: 1250,50 -> 1250.50
-        s_digits = s_digits.replace(",", ".")
+    elif "," in s_digits or "." in s_digits:
+        # Un solo tipo di separatore: migliaia (1.250 / 1.250.000 / 12,345) o decimale (1250,50 / 0.500)
+        sep = "," if "," in s_digits else "."
+        head, _, tail = s_digits.partition(sep)
+        is_thousands = s_digits.count(sep) > 1 or (len(tail) == 3 and 1 <= len(head) <= 3 and head != "0")
+        s_digits = s_digits.replace(sep, "") if is_thousands else s_digits.replace(",", ".")
 
     try:
         res = float(s_digits)
@@ -223,7 +242,7 @@ class TradeRepublicParser(BaseBankParser):
         if "trade" in fn or "republic" in fn:
             return True
         if isinstance(file_content, bytes):
-            sample = file_content[:2048].decode("utf-8", errors="ignore")
+            sample = _decode_text(file_content[:2048])
         else:
             sample = file_content[:2048]
         # Se ha intestazioni austriache/tedesche di George, è Erste Bank
@@ -238,7 +257,7 @@ class TradeRepublicParser(BaseBankParser):
 
     def parse(self, file_content: Union[str, bytes], filename: str) -> BankStatement:
         if isinstance(file_content, bytes):
-            text = file_content.decode("utf-8", errors="ignore")
+            text = _decode_text(file_content)
         else:
             text = file_content
 
@@ -351,7 +370,7 @@ class ErsteBankParser(BaseBankParser):
         if "erste" in fn or "george" in fn or "sparkasse" in fn:
             return True
         if isinstance(file_content, bytes):
-            sample = file_content[:2048].decode("utf-8", errors="ignore")
+            sample = _decode_text(file_content[:2048])
         else:
             sample = file_content[:2048]
         indicators = ["Buchungsdatum", "Partnername", "Partner-IBAN", "Buchungstext", "Valutadatum"]
@@ -359,7 +378,7 @@ class ErsteBankParser(BaseBankParser):
 
     def parse(self, file_content: Union[str, bytes], filename: str) -> BankStatement:
         if isinstance(file_content, bytes):
-            text = file_content.decode("utf-8", errors="ignore")
+            text = _decode_text(file_content)
         else:
             text = file_content
 
@@ -454,7 +473,7 @@ class ItalianBankParser(BaseBankParser):
         if any(b in fn for b in ["unicredit", "intesa", "fineco", "widiba", "poste", "bpm", "bper", "sanpaolo"]):
             return True
         if isinstance(file_content, bytes):
-            sample = file_content[:2048].decode("utf-8", errors="ignore")
+            sample = _decode_text(file_content[:2048])
         else:
             sample = file_content[:2048]
         indicators = ["Data Operazione", "Data Valuta", "Causale", "Descrizione", "Entrate", "Uscite", "Saldo Contabile"]
@@ -462,7 +481,7 @@ class ItalianBankParser(BaseBankParser):
 
     def parse(self, file_content: Union[str, bytes], filename: str) -> BankStatement:
         if isinstance(file_content, bytes):
-            text = file_content.decode("utf-8", errors="ignore")
+            text = _decode_text(file_content)
         else:
             text = file_content
 
@@ -561,7 +580,7 @@ class DigitalBankParser(BaseBankParser):
         if "revolut" in fn or "n26" in fn:
             return True
         if isinstance(file_content, bytes):
-            sample = file_content[:2048].decode("utf-8", errors="ignore")
+            sample = _decode_text(file_content[:2048])
         else:
             sample = file_content[:2048]
         indicators = ["Started Date", "Completed Date", "Payment reference", "Transaction type", "Amount (EUR)"]
@@ -569,7 +588,7 @@ class DigitalBankParser(BaseBankParser):
 
     def parse(self, file_content: Union[str, bytes], filename: str) -> BankStatement:
         if isinstance(file_content, bytes):
-            text = file_content.decode("utf-8", errors="ignore")
+            text = _decode_text(file_content)
         else:
             text = file_content
 
@@ -717,7 +736,7 @@ class WalletAppParser(BaseBankParser):
             return False
 
         if isinstance(file_content, bytes):
-            sample = file_content[:4096].decode("utf-8", errors="ignore")
+            sample = _decode_text(file_content[:4096])
         else:
             sample = str(file_content)[:4096]
 
@@ -744,7 +763,7 @@ class WalletAppParser(BaseBankParser):
 
     def parse(self, file_content: Union[str, bytes], filename: str) -> BankStatement:
         if isinstance(file_content, bytes):
-            text = file_content.decode("utf-8", errors="ignore")
+            text = _decode_text(file_content)
         else:
             text = str(file_content)
 
@@ -925,7 +944,7 @@ class GenericBankParser(BaseBankParser):
         else:
             # Lettura CSV/TSV
             if isinstance(file_content, bytes):
-                text = file_content.decode("utf-8", errors="ignore")
+                text = _decode_text(file_content)
             else:
                 text = str(file_content)
 
@@ -1659,7 +1678,7 @@ class InvestmentPortfolioParser(BaseBankParser):
         if any(k in fn for k in ["etf", "portfolio", "titoli", "holdings", "invest", "depot", "broker", "scalable", "degiro", "directa"]):
             return True
         try:
-            sample = file_content[:4096].decode("utf-8", errors="ignore") if isinstance(file_content, bytes) else str(file_content)[:4096]
+            sample = _decode_text(file_content[:4096]) if isinstance(file_content, bytes) else str(file_content)[:4096]
             sample_low = sample.lower()
             investment_terms = ["ticker", "isin", "shares", "quote", "quantita", "quantità", "market_value", "controvalore", "cost_basis", "prezzo_carico", "prezzo medio", "asset_class"]
             matches = sum(1 for term in investment_terms if term in sample_low)
@@ -1679,7 +1698,7 @@ class InvestmentPortfolioParser(BaseBankParser):
             except Exception as e:
                 raise ValueError(f"Impossibile leggere file Excel portafoglio {filename}: {e}")
         else:
-            text = file_content.decode("utf-8", errors="ignore") if isinstance(file_content, bytes) else str(file_content)
+            text = _decode_text(file_content) if isinstance(file_content, bytes) else str(file_content)
             for sep in [",", ";", "\t", "|"]:
                 try:
                     temp_df = pd.read_csv(io.StringIO(text), sep=sep, comment="#")
@@ -1828,6 +1847,7 @@ def parse_bank_statement(
     elif filename is None:
         filename = "statement.csv"
 
+    errors: List[str] = []
     for parser in AVAILABLE_PARSERS:
         try:
             if parser.can_parse(file_content, filename):
@@ -1837,12 +1857,17 @@ def parse_bank_statement(
                 if override_institution:
                     stmt.institution = override_institution
                 return stmt
-        except Exception:
+        except Exception as e:
+            errors.append(f"{type(parser).__name__}: {e}")
             continue
 
     # Fallback finale
     fallback = GenericBankParser()
-    stmt = fallback.parse(file_content, filename)
+    try:
+        stmt = fallback.parse(file_content, filename)
+    except Exception as e:
+        detail = "; ".join(errors[-2:] + [f"GenericBankParser: {e}"])
+        raise ValueError(f"Formato non riconosciuto per '{filename}' ({detail})") from e
     if override_asset_class:
         stmt.asset_class = override_asset_class
     if override_institution:

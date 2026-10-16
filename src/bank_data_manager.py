@@ -68,6 +68,15 @@ def load_all_bank_statements(
     aggregator = PortfolioAggregator()
     cutoff = pd.to_datetime(as_of_date).normalize() if as_of_date else None
     seen_sources = set()
+    warnings_list: List[str] = []
+
+    def _register(stmt, fname):
+        """Aggiunge lo statement solo se contiene dati; altrimenti lo segnala."""
+        if stmt.transactions.empty and not stmt.ending_balance:
+            warnings_list.append(f"{fname}: nessuna transazione riconosciuta, file ignorato")
+            return False
+        aggregator.add_statement(stmt)
+        return True
 
     # 1. Caricamento da file caricati via UI
     if uploaded_files:
@@ -78,10 +87,10 @@ def load_all_bank_statements(
             try:
                 content = uf.getvalue()
                 stmt = parse_bank_statement(content, fname)
-                aggregator.add_statement(stmt)
+                _register(stmt, fname)
                 seen_sources.add(fname)
             except Exception as e:
-                print(f"[WARN] Errore caricamento file {fname}: {e}")
+                warnings_list.append(f"{fname}: {e}")
 
     # 2. Caricamento da directory disco (bank_statements, investments e wallet)
     search_dirs = [Path(statements_dir), Path("input/investments"), Path("input/wallet")]
@@ -101,13 +110,15 @@ def load_all_bank_statements(
                 if fpath.suffix.lower() in valid_extensions and not fpath.name.startswith("."):
                     try:
                         stmt = parse_bank_statement(fpath)
-                        aggregator.add_statement(stmt)
+                        _register(stmt, fpath.name)
                         seen_sources.add(fpath.name)
                     except Exception as e:
-                        print(f"[WARN] Errore parsing {fpath.name}: {e}")
+                        warnings_list.append(f"{fpath.name}: {e}")
 
     summary = aggregator.aggregate(as_of_date=cutoff)
-    return aggregator.statements, summary
+    summary.load_warnings = warnings_list
+    # Un solo statement per conto (file multipli dello stesso conto già consolidati)
+    return aggregator.effective_statements, summary
 
 
 def classify_transaction(description: str, amount: float) -> str:
@@ -668,6 +679,7 @@ def apply_user_overrides(
     agg = PortfolioAggregator(statements)
     new_summary = agg.aggregate()
     new_summary.all_transactions = df_all
+    new_summary.load_warnings = list(getattr(summary, "load_warnings", []))
 
     return statements, new_summary
 

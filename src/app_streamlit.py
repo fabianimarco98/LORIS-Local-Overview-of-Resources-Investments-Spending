@@ -332,6 +332,8 @@ with st.sidebar:
                 undo_last_upload()
 
         st.markdown(f"**{t('loaded_accounts', lang)}:** {len(statements)}")
+        for _w in getattr(summary, "load_warnings", []):
+            st.warning(f"⚠️ {_w}")
         for stmt in statements:
             if "invest" in stmt.asset_class.lower() or "broker" in stmt.account_type.lower():
                 icon = "📊"

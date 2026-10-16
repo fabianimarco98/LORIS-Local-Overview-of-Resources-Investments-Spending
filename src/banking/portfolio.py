@@ -75,6 +75,7 @@ class PortfolioSummary:
     reconciliation_monefy: Dict[str, Any] = field(default_factory=dict)
     has_wallet_tracker: bool = False
     wallet_summary: Dict[str, Any] = field(default_factory=dict)
+    load_warnings: List[str] = field(default_factory=list)
 
 
 class PortfolioAggregator:
@@ -82,6 +83,7 @@ class PortfolioAggregator:
 
     def __init__(self, statements: Optional[List[BankStatement]] = None):
         self.statements: List[BankStatement] = statements or []
+        self.effective_statements: List[BankStatement] = []
 
     def add_statement(self, statement: BankStatement):
         self.statements.append(statement)
@@ -146,6 +148,8 @@ class PortfolioAggregator:
                     metadata=combined_meta,
                 )
                 effective_statements.append(cons_stmt)
+
+        self.effective_statements = effective_statements
 
         # 1. Tabella di sintesi dei conti
         acc_rows = []
