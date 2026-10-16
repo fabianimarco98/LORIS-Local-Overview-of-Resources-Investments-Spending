@@ -18,8 +18,8 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-# Costanti di compatibilità storica
-END_DATE = pd.to_datetime("2030-01-01")
+# Orizzonte di default quando non specificato
+DEFAULT_HORIZON_MONTHS = 36
 PHASE_2_DATE = pd.to_datetime("2029-01-01")
 AUSTRIAN_KEST = 0.275
 DEFAULT_TAX_RATE = 0.26
@@ -32,11 +32,7 @@ def sim_months(start: Union[str, pd.Timestamp], end: Optional[Union[str, pd.Time
     if end is not None:
         e = pd.to_datetime(end)
     else:
-        # Se start è precedente a END_DATE, default a END_DATE per compatibilità, altrimenti 36 mesi
-        if s <= END_DATE:
-            e = END_DATE
-        else:
-            return 36
+        return DEFAULT_HORIZON_MONTHS
     m = (e.year - s.year) * 12 + (e.month - s.month) + 1
     return max(1, m)
 
@@ -90,11 +86,7 @@ def run_simulation(
     elif end_date is not None:
         months = sim_months(start_dt, end_date)
     else:
-        # Fallback intelligente: se start è prima di Nov 2029 usa mesi rimanenti, altrimenti 36 mesi
-        if start_dt <= END_DATE:
-            months = sim_months(start_dt, END_DATE)
-        else:
-            months = 36
+        months = DEFAULT_HORIZON_MONTHS
     months = max(1, months)
 
     dates = pd.date_range(start=start_dt, periods=months, freq="MS")

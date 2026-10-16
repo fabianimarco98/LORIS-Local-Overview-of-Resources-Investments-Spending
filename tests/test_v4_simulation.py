@@ -67,7 +67,7 @@ class TestV4SpecialeIntegration(unittest.TestCase):
             macro_df=macro,
         )
 
-        self.assertEqual(len(res["dates"]), 38)
+        self.assertEqual(len(res["dates"]), 36)
         self.assertIn("cash", res)
         self.assertIn("cash_history", res)
         self.assertIn("invest", res)
@@ -95,10 +95,10 @@ class TestV4SpecialeIntegration(unittest.TestCase):
             monthly_expenses_std=stats["monthly_expenses_std"],
         )
 
-        self.assertEqual(len(res["dates"]), 38)
+        self.assertEqual(len(res["dates"]), 36)
         self.assertGreater(res["p50"], 0.0)
         self.assertIn("cash_history", res)
-        self.assertEqual(res["cash_history"].shape, (300, 38))
+        self.assertEqual(res["cash_history"].shape, (300, 36))
 
     def test_detect_recurring_from_statements(self):
         """Verifica la rilevazione automatica delle spese fisse/ricorrenti dagli estratti conto."""

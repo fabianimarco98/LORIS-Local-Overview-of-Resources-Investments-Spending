@@ -89,7 +89,7 @@ class TestSimulationEngineStress(unittest.TestCase):
         """20.000 iterazioni ad altissimo carico su orizzonte esteso: verifica stabilità memoria."""
         t0 = time.perf_counter()
         res = se.run_simulation(
-            start="2024-11-01",  # 61 mesi
+            start="2024-11-01",  # orizzonte di default: 36 mesi
             n_sims=20000,
             seed=999,
             pac=100.0,
@@ -103,7 +103,7 @@ class TestSimulationEngineStress(unittest.TestCase):
         elapsed = time.perf_counter() - t0
         self.assertLess(elapsed, 8.0, f"Simulazione 20k troppo lenta: {elapsed:.2f}s")
         self.assertEqual(res["cash_history"].shape[0], 20000)
-        self.assertEqual(res["cash_history"].shape[1], 61)
+        self.assertEqual(res["cash_history"].shape[1], 36)
 
     def test_zero_and_negative_starting_cash_edge_cases(self):
         """Casi limite: cassa 0 e cassa iniziale fortemente negativa (-€5.000)."""
