@@ -21,6 +21,7 @@ import bank_data_manager as bdm
 import loris_service as svc
 import simulation_engine as se
 from i18n import t, get_category_translation, AVAILABLE_LANGUAGES
+from net_worth_ui import render_net_worth_tab
 
 CURRENT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CURRENT_DIR.parent if (CURRENT_DIR.parent / "input").exists() else CURRENT_DIR
@@ -515,8 +516,9 @@ with col_k6:
 # ------------------------------------------------------------
 # TABS PRINCIPALI (BILINGUE & DEEP-DIVE STORICO)
 # ------------------------------------------------------------
-tab_overview, tab_analytics, tab_statements, tab_sim, tab_ai, tab_settings = st.tabs([
+tab_overview, tab_net_worth, tab_analytics, tab_statements, tab_sim, tab_ai, tab_settings = st.tabs([
     t("tab_overview", lang),
+    t("tab_net_worth", lang),
     t("tab_analytics", lang),
     t("tab_transactions", lang),
     t("tab_forecasting", lang),
@@ -682,6 +684,13 @@ with tab_overview:
             )
         else:
             st.metric("Valore Investimenti Totale" if lang == "it" else "Total Investments Value", f"€ {summary.total_investments:,.2f}")
+
+
+# ------------------------------------------------------------
+# TAB 1b: PATRIMONIO NEL TEMPO (SNAPSHOT MANUALI PERIODICI)
+# ------------------------------------------------------------
+with tab_net_worth:
+    render_net_worth_tab(summary, lang)
 
 
 # ------------------------------------------------------------

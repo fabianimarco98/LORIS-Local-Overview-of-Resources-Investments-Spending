@@ -367,6 +367,22 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
             "probability_of_running_out_of_cash_pct": res["prob_ruin"],
         }
 
+    def net_worth_history() -> Dict[str, Any]:
+        import loris_service as svc
+        hist = svc.get_net_worth_history()
+        if not hist["snapshots"]:
+            return {"snapshots": 0, "note": "nessun aggiornamento del patrimonio registrato"}
+        names = {h["id"]: ctx.scrubber.anonymize_text(h["name"]) for h in hist["holdings"]}
+        latest = hist["snapshots"][-1]
+        return {
+            "snapshots": len(hist["snapshots"]),
+            "latest_date": latest["date"],
+            "latest_values": [{"holding": names.get(k, k), "value": v} for k, v in latest["values"].items()],
+            "totals_and_changes": hist["deltas"],
+            "days_since_last_update": hist["days_since_last"],
+            "update_due": hist["update_due"],
+        }
+
     month_prop = {"type": "string", "pattern": MONTH_PATTERN, "format_hint": "YYYY-MM, es. 2026-09",
                   "description": "Mese nel formato YYYY-MM (es. 2026-09)"}
     date_prop = {"type": "string", "pattern": DATE_PATTERN, "format_hint": "YYYY-MM-DD, es. 2026-09-30"}
@@ -405,6 +421,9 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
               "years": {"type": "integer", "minimum": 1, "maximum": 40},
               "expected_annual_return_pct": {"type": "number", "minimum": -20, "maximum": 30}},
              simulate_pac, required=["monthly_pac"]),
+        Tool("net_worth_history",
+             "Storico del patrimonio registrato a mano (snapshot periodici): totali, variazioni e se serve un aggiornamento.",
+             {}, net_worth_history),
         Tool("run_forecast",
              "Previsione Monte Carlo del patrimonio (P5/P50/P95 e probabilità di esaurire la cassa).",
              {"horizon_months": {"type": "integer", "minimum": 6, "maximum": 120},

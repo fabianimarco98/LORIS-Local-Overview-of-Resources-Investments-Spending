@@ -52,6 +52,38 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "en": "⚙️ Settings & Privacy",
     },
 
+    # Net worth over time (manual periodic snapshots)
+    "tab_net_worth": {"it": "📈 Patrimonio nel tempo", "en": "📈 Net Worth Over Time"},
+    "nw_intro": {
+        "it": "Registra a mano il valore di ogni conto o investimento (es. ogni 3 mesi) per seguire il patrimonio nel tempo. Non servono estratti conto.",
+        "en": "Record the value of each account or investment by hand (e.g. every 3 months) to follow your net worth over time. No statements needed.",
+    },
+    "nw_due_never": {"it": "Nessun aggiornamento registrato: inserisci il primo qui sotto.", "en": "No update recorded yet: enter the first one below."},
+    "nw_due_days": {"it": "Ultimo aggiornamento {days} giorni fa: è ora di aggiornare.", "en": "Last update was {days} days ago: time to update."},
+    "nw_holdings": {"it": "Le tue voci", "en": "Your holdings"},
+    "nw_no_holdings": {"it": "Nessuna voce: aggiungi il primo conto o investimento.", "en": "No holdings yet: add your first account or investment."},
+    "nw_add_holding": {"it": "Aggiungi voce", "en": "Add holding"},
+    "nw_holding_name": {"it": "Nome (es. Conto principale)", "en": "Name (e.g. Main account)"},
+    "nw_holding_class": {"it": "Tipo di patrimonio", "en": "Asset type"},
+    "nw_holding_link": {"it": "Collega a un conto degli estratti (opzionale)", "en": "Link to a statement account (optional)"},
+    "nw_holding_link_none": {"it": "— nessuno —", "en": "— none —"},
+    "nw_archive": {"it": "Archivia", "en": "Archive"},
+    "nw_new_update": {"it": "Nuovo aggiornamento", "en": "New update"},
+    "nw_date": {"it": "Data", "en": "Date"},
+    "nw_note": {"it": "Nota (opzionale)", "en": "Note (optional)"},
+    "nw_save": {"it": "Salva aggiornamento", "en": "Save update"},
+    "nw_saved": {"it": "Aggiornamento salvato.", "en": "Update saved."},
+    "nw_value_for": {"it": "Valore in € — {name}", "en": "Value in € — {name}"},
+    "nw_prefill_hint": {"it": "I valori sono precompilati dall'ultimo aggiornamento o dagli estratti collegati.", "en": "Values are prefilled from the last update or from linked statements."},
+    "nw_chart_title": {"it": "Patrimonio per tipo", "en": "Net worth by type"},
+    "nw_changes_title": {"it": "Variazioni tra aggiornamenti", "en": "Changes between updates"},
+    "nw_col_date": {"it": "Data", "en": "Date"},
+    "nw_col_total": {"it": "Totale €", "en": "Total €"},
+    "nw_col_delta": {"it": "Variazione €", "en": "Change €"},
+    "nw_col_delta_pct": {"it": "Variazione %", "en": "Change %"},
+    "nw_no_snapshots": {"it": "Nessun aggiornamento ancora: il grafico appare dopo il primo.", "en": "No updates yet: the chart appears after the first one."},
+    "nw_file_error": {"it": "Il file del patrimonio non è leggibile: {err}", "en": "The net worth file cannot be read: {err}"},
+
     # Language Switcher
     "language": {
         "it": "Lingua",

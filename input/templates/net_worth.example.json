@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "holdings": [
+    {"id": "conto_principale", "name": "Conto principale", "asset_class": "LIQUID_CASH", "institution": "Banca Esempio", "currency": "EUR", "notes": "", "linked_account_id": null, "archived": false},
+    {"id": "broker_etf", "name": "Broker ETF", "asset_class": "INVESTMENTS", "institution": "Broker Esempio", "currency": "EUR", "notes": "", "linked_account_id": null, "archived": false},
+    {"id": "contanti", "name": "Contanti", "asset_class": "OTHER", "institution": "", "currency": "EUR", "notes": "Valore stimato", "linked_account_id": null, "archived": false}
+  ],
+  "snapshots": [
+    {"date": "2026-01-15", "values": {"conto_principale": 4200.0, "broker_etf": 8000.0, "contanti": 300.0}, "note": "Primo aggiornamento (dati di esempio)"},
+    {"date": "2026-04-15", "values": {"conto_principale": 4600.0, "broker_etf": 8650.0, "contanti": 250.0}, "note": ""}
+  ]
+}

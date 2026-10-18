@@ -95,6 +95,28 @@ def get_portfolio(as_of: Optional[str] = None):
     }
 
 
+class SnapshotRequest(BaseModel):
+    date: str
+    values: Dict[str, float]
+    note: str = ""
+
+
+@app.get("/api/net-worth/history")
+def get_net_worth_history(stale_days: int = Query(90, ge=1, le=3650)):
+    try:
+        return svc.get_net_worth_history(stale_days=stale_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/net-worth/snapshot")
+def post_net_worth_snapshot(req: SnapshotRequest):
+    try:
+        return svc.record_snapshot(req.date, req.values, req.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
 @app.get("/api/transactions")
 def get_transactions(
     limit: int = Query(100, ge=1, le=1000),

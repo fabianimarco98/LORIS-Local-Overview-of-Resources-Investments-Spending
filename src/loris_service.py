@@ -15,6 +15,7 @@ import pandas as pd
 
 import bank_data_manager as bdm
 import simulation_engine as se
+from banking import net_worth as nw
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STATEMENTS_DIR = PROJECT_ROOT / "input" / "bank_statements"
@@ -70,6 +71,31 @@ def load_portfolio(
     if apply_overrides:
         statements, summary = bdm.apply_user_overrides(statements, summary, overrides)
     return build_portfolio_data(statements, summary)
+
+
+def get_net_worth_history(path: Optional[Any] = None, stale_days: int = nw.DEFAULT_STALE_DAYS) -> Dict[str, Any]:
+    """Storico del patrimonio (voci, snapshot, variazioni) in forma serializzabile, uguale per tutte le interfacce."""
+    store = nw.load(path)
+    d = nw.deltas(store)
+    return {
+        "holdings": [vars(h).copy() for h in store.holdings],
+        "snapshots": [{"date": s.date, "values": dict(s.values), "note": s.note} for s in store.snapshots],
+        "deltas": [{"date": r.date, "total": float(r.total),
+                    "delta": None if r.delta != r.delta else float(r.delta),
+                    "delta_pct": None if r.delta_pct != r.delta_pct else float(r.delta_pct)}
+                   for r in d.itertuples(index=False)],
+        "days_since_last": nw.days_since_last(store),
+        "update_due": nw.is_update_due(store, stale_days),
+    }
+
+
+def record_snapshot(snap_date: Any, values: Dict[str, Any], note: str = "",
+                    path: Optional[Any] = None) -> Dict[str, Any]:
+    """Registra uno snapshot del patrimonio (stessa data = sostituisce) e salva il file in modo atomico."""
+    store = nw.load(path)
+    snap = nw.add_snapshot(store, snap_date, values, note)
+    nw.save(store, path)
+    return {"date": snap.date, "values": dict(snap.values), "note": snap.note}
 
 
 def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:

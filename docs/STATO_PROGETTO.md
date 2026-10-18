@@ -58,6 +58,7 @@
 ## 📈 Tab della Dashboard Web Bilingue (`app_streamlit.py`)
 
 1. **🏦 Patrimonio & Saldi / Net Worth & Accounts**: Saldi consolidati per banca/broker, Donut Chart Asset Allocation e conti tracciati.
+1b. **📈 Patrimonio nel tempo / Net Worth Over Time**: Voci definite dall'utente (conti, broker, contanti, immobili...), aggiornamento periodico dei valori (es. ogni 3 mesi), grafico per tipo di patrimonio e variazioni tra aggiornamenti. Funziona anche senza estratti conto; le voci collegate a un conto degli estratti vengono precompilate col suo saldo. Dati in `input/net_worth.json` (modello: `input/templates/net_worth.example.json`), disponibili anche via API (`/api/net-worth/history`, `/api/net-worth/snapshot`) e per l'assistente AI (tool `net_worth_history`, sola lettura).
 2. **📊 Analisi Storica & Statistiche / Historical Analytics**: Periodo tracciato, entrate/uscite totali, risparmio netto, tasso di risparmio, evoluzione mensile cash flow, ripartizione spese per categoria, top 10 esercenti/beneficiari e spese fisse rilevate.
 3. **📑 Estratti Conto & Transazioni / Statements & Transactions**: Drag & drop multi-file (PDF, CSV, Excel), registro con filtri per banca, categoria e ricerca testo, tabella dei giroconti neutralizzati.
 4. **🎲 Previsioni Future (Monte Carlo) / Future Forecasting**: Orizzonte temporale flessibile (12, 24, 36, 60 mesi), fan-chart percentili (5°-95°), rischio di scoperto di liquidità, traiettoria cassa vs investimenti e potere d'acquisto reale.
@@ -68,7 +69,7 @@
 
 ## 🧪 Validazione & Stress Test Suite (`tests/test_stress.py`)
 
-La suite di test completa comprende **37 test totali (21 test unitari/integrazione + 16 stress test ad alto carico)**, tutti superati al 100%:
+La suite di test completa comprende **150 test** (`python -m unittest discover tests`), di cui 16 stress test ad alto carico in `tests/test_stress.py`; 3 test API vengono saltati se `fastapi` non è installato. Tutti i test eseguiti sono superati. Tabella degli stress test:
 
 | Ambito di Stress Test | Condizioni di Carico & Scenari Limite | Tempo & Prestazioni | Esito |
 | :--- | :--- | :--- | :--- |
