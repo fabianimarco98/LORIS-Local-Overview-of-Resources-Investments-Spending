@@ -126,12 +126,62 @@ class PortfolioSummary:
     load_warnings: List[str] = field(default_factory=list)
 
 
+STALE_STATEMENT_DAYS = 60       # oltre, il saldo dell'ultimo estratto potrebbe non essere più attuale
+MAX_STATEMENT_GAP_DAYS = 35     # buco tra due estratti dello stesso conto oltre il quale mancano movimenti
+CONTINUITY_MAX_GAP_DAYS = 5     # estratti "consecutivi": il saldo finale del primo deve essere l'iniziale del secondo
+
+
+def _dedupe_overlapping(frames: List[pd.DataFrame]) -> pd.DataFrame:
+    """
+    Unisce i movimenti di estratti dello stesso conto. La stessa operazione presente in due file sovrapposti
+    conta una volta; operazioni identiche ripetute dentro lo STESSO file (due caffè uguali nello stesso giorno)
+    restano distinte: la chiave include il numero d'ordine dell'occorrenza all'interno di ciascun file.
+    """
+    merged = pd.concat([f.assign(_src=i) for i, f in enumerate(frames)], ignore_index=True)
+    if not {"date", "amount", "description"}.issubset(merged.columns):
+        return merged.drop(columns="_src")
+    keys = pd.DataFrame({
+        "_s": merged["_src"],
+        "_d": merged["date"],
+        "_a": merged["amount"].round(2),
+        "_t": merged["description"].astype(str).str.lower().str.replace(r"\s+", " ", regex=True).str.strip(),
+    })
+    keys["_o"] = keys.groupby(["_s", "_d", "_a", "_t"], dropna=False).cumcount()
+    keep = ~keys.duplicated(subset=["_d", "_a", "_t", "_o"])
+    return merged[keep].drop(columns="_src").sort_values("date", kind="stable").reset_index(drop=True)
+
+
+def _consecutive_statement_warnings(acc_id: str, group: List[BankStatement]) -> List[str]:
+    """Buchi di periodo e saldi che non si raccordano tra estratti ordinati dello stesso conto."""
+    out: List[str] = []
+    for prev, nxt in zip(group, group[1:]):
+        try:
+            if prev.end_date is None or nxt.start_date is None:
+                continue
+            gap = (pd.Timestamp(nxt.start_date) - pd.Timestamp(prev.end_date)).days
+        except (TypeError, ValueError):
+            continue
+        label = f"{nxt.institution} ({acc_id})"
+        if gap > MAX_STATEMENT_GAP_DAYS:
+            out.append(f"{label}: nessun dato tra il {pd.Timestamp(prev.end_date):%d/%m/%Y} e il "
+                       f"{pd.Timestamp(nxt.start_date):%d/%m/%Y}: potrebbero mancare movimenti")
+        elif 0 <= gap <= CONTINUITY_MAX_GAP_DAYS and (nxt.metadata or {}).get("opening_explicit") \
+                and not (prev.metadata or {}).get("balance_estimated"):
+            diff = round((prev.ending_balance or 0.0) - (nxt.starting_balance or 0.0), 2)
+            if abs(diff) > 0.01:
+                out.append(f"{label}: il saldo finale di {prev.source_file} non coincide con il saldo iniziale di "
+                           f"{nxt.source_file} (scarto {f'{diff:+,.2f}'.replace(',', '§').replace('.', ',').replace('§', '.')}): "
+                           "controlla che non manchino movimenti")
+    return out
+
+
 class PortfolioAggregator:
     """Aggrega molteplici estratti conto ed esegue analisi patrimoniali."""
 
     def __init__(self, statements: Optional[List[BankStatement]] = None):
         self.statements: List[BankStatement] = statements or []
         self.effective_statements: List[BankStatement] = []
+        self.warnings: List[str] = []       # avvisi di qualità dati emersi nell'ultima aggregazione
 
     def add_statement(self, statement: BankStatement):
         self.statements.append(statement)
@@ -151,6 +201,7 @@ class PortfolioAggregator:
         monefy_df: DataFrame di Monefy per la riconciliazione automatica.
         """
         manual_balances = manual_account_balances or {}
+        self.warnings = []
 
         # Consolidamento automatico di estratti conto multipli o a periodi consecutivi per lo stesso conto
         grouped_statements: Dict[str, List[BankStatement]] = {}
@@ -168,13 +219,9 @@ class PortfolioAggregator:
                     x.transactions["date"].max() if (not x.transactions.empty and "date" in x.transactions.columns) else pd.Timestamp.min
                 ))
                 latest_stmt = group[-1]
+                self.warnings.extend(_consecutive_statement_warnings(acc_id, group))
                 all_txs_list = [x.transactions for x in group if not x.transactions.empty]
-                if all_txs_list:
-                    merged_tx = pd.concat(all_txs_list, ignore_index=True)
-                    if "date" in merged_tx.columns and "amount" in merged_tx.columns and "description" in merged_tx.columns:
-                        merged_tx = merged_tx.drop_duplicates(subset=["date", "amount", "description"]).sort_values("date").reset_index(drop=True)
-                else:
-                    merged_tx = pd.DataFrame()
+                merged_tx = _dedupe_overlapping(all_txs_list) if all_txs_list else pd.DataFrame()
 
                 earliest_start = min((x.start_date for x in group if x.start_date is not None), default=None)
                 all_sources = ", ".join(dict.fromkeys(x.source_file for x in group if x.source_file))
@@ -203,6 +250,23 @@ class PortfolioAggregator:
                 effective_statements.append(cons_stmt)
 
         self.effective_statements = effective_statements
+
+        # Dati vecchi: l'ultimo estratto di un conto reale è molto indietro rispetto a oggi
+        if as_of_date is None:
+            today = pd.Timestamp.today().normalize()
+            for s in effective_statements:
+                if s.asset_class == "EXPENSE_TRACKER" or s.account_type == "ExpenseTracker":
+                    continue
+                last = s.end_date
+                if last is None and s.transactions is not None and not s.transactions.empty and "date" in s.transactions.columns:
+                    last = s.transactions["date"].max()
+                if last is None or pd.isna(last):
+                    continue
+                age = (today - pd.Timestamp(last).normalize()).days
+                if age > STALE_STATEMENT_DAYS:
+                    self.warnings.append(
+                        f"{s.institution} ({s.account_id}): ultimo dato del {pd.Timestamp(last):%d/%m/%Y} "
+                        f"({age} giorni fa): il saldo potrebbe non essere aggiornato")
 
         # 1. Tabella di sintesi dei conti
         acc_rows = []

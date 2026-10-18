@@ -55,6 +55,27 @@
 
 ---
 
+## 📄 Lettura dei PDF e controlli di coerenza
+
+Moduli: [pdf_extract.py](../src/banking/pdf_extract.py) (estrazione) e [pdf_statement.py](../src/banking/pdf_statement.py) (interpretazione). Principio: **un errore non passa mai in silenzio**; ogni problema diventa un avviso in `load_warnings`, visibile in dashboard, CLI (`status`), API (`/api/portfolio` → `warnings`) e nel riepilogo dell'assistente AI.
+
+| Caso | Comportamento |
+| :--- | :--- |
+| PDF vuoto, non-PDF, troncato, scansionato (nessun testo), protetto da password | Errore chiaro e mostrabile, con il suggerimento di inserire i saldi a mano in "Patrimonio nel tempo" |
+| Una pagina illeggibile o senza testo | Segnalata e saltata, le altre pagine vengono lette; pdfplumber con ripiego pypdf pagina per pagina |
+| Più PDF dello stesso conto (es. un estratto al mese) | Un solo conto, identificato dall'IBAN (checksum mod-97 validato) o dal numero di conto; il saldo è quello dell'ultimo estratto, non la somma |
+| Saldo iniziale e finale | Riconosciuti separatamente; "iniziale + movimenti = finale" viene verificato e lo scarto in euro è riportato |
+| Colonna saldo presente | I segni degli importi si ricavano dalla variazione del saldo; estratti con il più recente in alto vengono rovesciati; colonna incoerente = ignorata con avviso |
+| Movimenti identici (due caffè uguali nello stesso giorno) | Tutti mantenuti; nell'unione di estratti sovrapposti la stessa operazione conta una volta |
+| Buchi tra estratti, saldi che non si raccordano, ultimo dato oltre 60 giorni | Avviso con le date e lo scarto |
+| Valuta diversa da EUR | Riconosciuta ed etichettata, con avviso (nessuna conversione automatica) |
+| Date senza anno, formato USA (MM/DD), righe di descrizione a capo | Gestite a partire dal periodo dell'estratto e dall'evidenza nei dati |
+| Saldo manuale di un conto che non esiste più (identificativo cambiato) | Avviso invece di essere ignorato in silenzio |
+
+Limiti noti: nessun OCR (le scansioni vanno sostituite con l'originale della banca o si inseriscono i saldi a mano); nessuna conversione di valuta; i layout non riconosciuti richiedono un parser dedicato. **Nota di migrazione:** gli identificativi dei conti PDF non dipendono più dal nome del file; un saldo manuale salvato con il vecchio identificativo viene segnalato e va reinserito.
+
+---
+
 ## 📈 Tab della Dashboard Web Bilingue (`app_streamlit.py`)
 
 1. **🏦 Patrimonio & Saldi / Net Worth & Accounts**: Saldi consolidati per banca/broker, Donut Chart Asset Allocation e conti tracciati.
@@ -69,7 +90,7 @@
 
 ## 🧪 Validazione & Stress Test Suite (`tests/test_stress.py`)
 
-La suite di test completa comprende **150 test** (`python -m unittest discover tests`), di cui 16 stress test ad alto carico in `tests/test_stress.py`; 3 test API vengono saltati se `fastapi` non è installato. Tutti i test eseguiti sono superati. Tabella degli stress test:
+La suite di test completa comprende **212 test** (`python -m unittest discover tests`), di cui 16 stress test ad alto carico in `tests/test_stress.py`; 3 test API vengono saltati se `fastapi` non è installato. Tutti i test eseguiti sono superati. Tabella degli stress test:
 
 | Ambito di Stress Test | Condizioni di Carico & Scenari Limite | Tempo & Prestazioni | Esito |
 | :--- | :--- | :--- | :--- |

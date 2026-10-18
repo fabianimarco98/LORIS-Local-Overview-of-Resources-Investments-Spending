@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 
+from .pdf_extract import PdfReadError
 from .user_profile import employer_keywords, owner_names
 
 # Supporto per PDF (pdfplumber e pypdf)
@@ -1113,6 +1114,10 @@ class PdfBankParser(BaseBankParser):
         return False
 
     def parse(self, file_content: Union[str, bytes], filename: str) -> BankStatement:
+        # Import locali: pdf_statement dipende da questo modulo (evita l'import circolare)
+        from .pdf_extract import PdfReadError, extract_pdf
+        from .pdf_statement import GENERIC_INSTITUTION, analyze_pdf_text, build_transactions_frame
+
         pdf_bytes = None
         if isinstance(file_content, (str, Path)) and os.path.exists(file_content):
             with open(file_content, "rb") as f:
@@ -1122,309 +1127,76 @@ class PdfBankParser(BaseBankParser):
         elif isinstance(file_content, str):
             pdf_bytes = file_content.encode("latin-1", errors="ignore")
 
-        if not pdf_bytes:
-            raise ValueError(f"File PDF vuoto o non accessibile: {filename}")
+        extraction = extract_pdf(pdf_bytes or b"")          # PdfReadError con messaggio per l'utente
+        analysis = analyze_pdf_text(extraction.text, extraction.tables, extraction.text_tables, filename)
 
-        full_text = ""
-        extracted_tables = []
+        # Estratti Trade Republic: parser dedicato ad alta fedeltà (conto unico, catena dei saldi propria)
+        if analysis.institution == "Trade Republic":
+            stmt = self._parse_trade_republic_pdf(extraction.text, filename)
+            stmt.metadata.setdefault("warnings", [])
+            stmt.metadata["warnings"] = list(extraction.warnings) + stmt.metadata["warnings"]
+            return stmt
 
-        # 1. Estrazione con pdfplumber (preferito per layout e tabelle)
-        if HAS_PDFPLUMBER:
-            try:
-                with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-                    for page in pdf.pages:
-                        page_tables = page.extract_tables() or []
-                        if not page_tables:
-                            page_tables = page.extract_tables({"vertical_strategy": "text", "horizontal_strategy": "text"}) or []
-                        for t in page_tables:
-                            if t and len(t) > 1:
-                                extracted_tables.append(t)
-                        t_text = page.extract_text(layout=False) or ""
-                        full_text += t_text + "\n"
-            except Exception:
-                pass
-
-        # 2. Integrazione o fallback con pypdf
-        if (not full_text.strip() or not HAS_PDFPLUMBER) and HAS_PYPDF:
-            try:
-                reader = PdfReader(io.BytesIO(pdf_bytes))
-                for page in reader.pages:
-                    t_text = page.extract_text() or ""
-                    full_text += t_text + "\n"
-            except Exception:
-                pass
-
-        # Rilevamento prioritario istituto bancario (dall'intestazione o nome file)
-        header_text = (filename + " " + full_text[:2500]).lower()
-        inst_name = "Estratto Conto PDF"
-        if "trade republic" in header_text or "trade_republic" in header_text or "traderepublic" in header_text or ("account" in filename.lower() and "trade" in filename.lower()):
-            inst_name = "Trade Republic"
-        elif "unicredit" in header_text:
-            inst_name = "UniCredit"
-        elif "intesa" in header_text or "sanpaolo" in header_text:
-            inst_name = "Intesa Sanpaolo"
-        elif "fineco" in header_text:
-            inst_name = "FinecoBank"
-        elif re.search(r"\berste\s+bank\b|\bsparkasse\b|\bgeorge\b", header_text):
-            inst_name = "Erste Bank / Sparkasse"
-        elif "revolut" in header_text:
-            inst_name = "Revolut"
-        elif "n26" in header_text:
-            inst_name = "N26"
-        elif "poste" in header_text or "bancoposta" in header_text:
-            inst_name = "Poste Italiane"
-        elif "mediolanum" in header_text:
-            inst_name = "Banca Mediolanum"
-        elif "widiba" in header_text:
-            inst_name = "Banca Widiba"
-        elif "deutsche bank" in header_text:
-            inst_name = "Deutsche Bank"
-        elif "ing direct" in header_text or "ing bank" in header_text:
-            inst_name = "ING"
-
-        # Se il documento è un estratto conto Trade Republic, usa il parser dedicato ad alta fedeltà
-        if inst_name == "Trade Republic":
-            return self._parse_trade_republic_pdf(full_text, filename)
-
-        rows = []
-        seen_keys = set()
-
-        # FASE A: Estrazione da tabelle strutturate (pdfplumber)
-        for table in extracted_tables:
-            if not table or len(table) < 2:
-                continue
-
-            header_idx = -1
-            date_col = -1
-            desc_col = -1
-            amt_col = -1
-            in_col = -1
-            out_col = -1
-            bal_col = -1
-
-            for r_i, r in enumerate(table[:3]):
-                r_cells = [str(c or "").lower().strip() for c in r]
-                has_d = any(any(k in c for k in ["data", "date", "datum"]) for c in r_cells)
-                has_a = any(any(k in c for k in ["importo", "amount", "betrag", "entrate", "uscite", "soll", "haben", "valore"]) for c in r_cells)
-                if has_d or has_a:
-                    header_idx = r_i
-                    for c_i, c in enumerate(r_cells):
-                        if any(k in c for k in ["data", "date", "datum", "buchung", "valuta"]) and date_col == -1:
-                            date_col = c_i
-                        elif any(k in c for k in ["descrizione", "causale", "buchungstext", "partner", "payee", "description", "verwendungszweck", "dettaglio", "text"]) and desc_col == -1:
-                            desc_col = c_i
-                        elif any(k in c for k in ["entrate", "accrediti", "money in", "credit", "haben"]) and not any(k in c for k in ["uscite", "addebiti"]):
-                            in_col = c_i
-                        elif any(k in c for k in ["uscite", "addebiti", "money out", "debit", "soll"]) and not any(k in c for k in ["entrate", "accrediti"]):
-                            out_col = c_i
-                        elif any(k in c for k in ["importo", "amount", "betrag", "valore", "entrate", "uscite"]) and amt_col == -1:
-                            amt_col = c_i
-                        elif any(k in c for k in ["saldo", "balance", "kontostand"]) and bal_col == -1:
-                            bal_col = c_i
-                    break
-
-            start_row = header_idx + 1 if header_idx >= 0 else 0
-            for row in table[start_row:]:
-                if not row or len(row) < 2:
-                    continue
-                d = None
-                d_idx = date_col if date_col != -1 else None
-                if d_idx is not None and d_idx < len(row):
-                    d = parse_flexible_date(row[d_idx])
-                if d is None:
-                    for c_i, cell in enumerate(row):
-                        parsed_d = parse_flexible_date(cell)
-                        if parsed_d is not None:
-                            d = parsed_d
-                            if date_col == -1:
-                                date_col = c_i
-                            break
-
-                if d is None:
-                    continue
-
-                amt = 0.0
-                if in_col != -1 and out_col != -1 and in_col != out_col and in_col < len(row) and out_col < len(row):
-                    v_in = clean_numeric_amount(row[in_col])
-                    v_out = clean_numeric_amount(row[out_col])
-                    amt = v_in if v_in != 0 else -abs(v_out)
-                elif amt_col != -1 and amt_col < len(row):
-                    amt = clean_numeric_amount(row[amt_col])
-                else:
-                    for c_i, cell in enumerate(row):
-                        if c_i == date_col:
-                            continue
-                        val = clean_numeric_amount(cell)
-                        if val != 0.0:
-                            amt = val
-                            break
-
-                if amt == 0.0:
-                    continue
-
-                desc = ""
-                if desc_col != -1 and desc_col < len(row) and row[desc_col]:
-                    desc = str(row[desc_col]).strip()
-                else:
-                    other_cells = [str(c).strip() for c_i, c in enumerate(row) if c_i not in (date_col, amt_col, in_col, out_col, bal_col) and str(c or "").strip()]
-                    desc = " - ".join(other_cells) if other_cells else f"Movimento {inst_name}"
-
-                desc_l = desc.lower()
-                if amt > 0 and any(w in desc_l for w in ["addebito", "rid", "spesa", "pagamento", "prelievo", "giroconto verso", "commission", "uscita"]) and not any(w in desc_l for w in ["stipendio", "accredito", "salary", "rimborso", "entrata"]):
-                    amt = -abs(amt)
-
-                key = (d, round(amt, 2), desc[:25].lower())
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-
-                is_internal = any(k in desc.lower() for k in ["giroconto", "trasferimento interno", "internal transfer", "own account", "trade republic", "revolut", "ricarica", "top up"])
-                rows.append({
-                    "date": d,
-                    "amount": amt,
-                    "currency": "EUR",
-                    "description": desc,
-                    "counterparty": desc,
-                    "category": "Giroconto" if is_internal else ("Entrata" if amt > 0 else "Uscita"),
-                    "is_internal_transfer": is_internal,
-                })
-
-        # FASE B: Estrazione da testo (se tabelle non hanno prodotto righe)
-        if len(rows) == 0 and full_text.strip():
-            # Pattern con due importi (Importo transazione + Saldo a fine riga)
-            pat_double_amt = re.compile(
-                r"^(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\s+(?:(?:\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\s+)?(.+?)\s+([+-]?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})\s*(?:[-+]|[SH]|DR|CR)?)\s+([+-]?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})\s*(?:[-+]|[SH]|DR|CR)?)\s*(?:€|EUR|USD|\b)?$",
-                re.IGNORECASE
+        if not analysis.rows and analysis.closing is None:
+            raise PdfReadError(
+                "nessun movimento né saldo riconosciuto (layout non supportato): "
+                "inserisci i saldi a mano in 'Patrimonio nel tempo'"
             )
 
-            # Pattern standard con singolo importo a fine riga
-            text_patterns = [
-                # 1. Standard Europeo: 15.09.2026 [16.09.2026] Testo causale -120,50 EUR
-                re.compile(r"^(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\s+(?:(?:\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\s+)?(.+?)\s+([+-]?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})\s*(?:[-+]|[SH]|DR|CR)?)\s*(?:€|EUR|USD|\b)?$", re.IGNORECASE),
-                # 2. Revolut / Inglese: 15 Sep 2026 Description -120.50 EUR
-                re.compile(r"^(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})\s+(.+?)\s+([+-]?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})\s*(?:[-+]|[SH]|DR|CR)?)\s*(?:€|EUR|USD|\b)?$", re.IGNORECASE),
-                # 3. ISO Date: 2026-09-15 Description -120.50
-                re.compile(r"^(\d{4}[./-]\d{1,2}[./-]\d{1,2})\s+(.+?)\s+([+-]?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})\s*(?:[-+]|[SH]|DR|CR)?)\s*(?:€|EUR|USD|\b)?$", re.IGNORECASE),
-            ]
+        # Identità del conto: stesso IBAN/numero => stesso conto, così i PDF di mesi diversi si consolidano
+        inst = analysis.institution
+        slug = re.sub(r"[^A-Za-z0-9]+", "_", inst).strip("_")
+        warnings = list(extraction.warnings) + list(analysis.warnings)
+        if analysis.account_tail:
+            account_id = f"PDF_{slug}_{analysis.account_tail}"
+        elif inst != GENERIC_INSTITUTION:
+            account_id = f"PDF_{slug}"
+            warnings.append(f"nessun IBAN trovato: tutti i PDF {inst} sono trattati come un unico conto")
+        else:
+            account_id = f"PDF_{Path(filename).stem.replace(' ', '_')}"
+            warnings.append("banca e IBAN non riconosciuti: il PDF è trattato come un conto a sé")
 
-            for raw_line in full_text.splitlines():
-                line = raw_line.strip()
-                if not line:
-                    continue
-
-                matched = False
-                # Prova prima pattern a doppio importo (Data, Causale, Movimento, Saldo)
-                m_double = pat_double_amt.match(line)
-                if m_double:
-                    raw_date, raw_desc, raw_amt, raw_bal = m_double.groups()
-                    d = parse_flexible_date(raw_date)
-                    if d is not None:
-                        amt = clean_numeric_amount(raw_amt)
-                        bal_after = clean_numeric_amount(raw_bal)
-                        clean_desc = raw_desc.strip()
-                        clean_desc = re.sub(r"^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\s+", "", clean_desc).strip()
-
-                        # Se l'importo è positivo ma la causale è chiaramente un addebito
-                        desc_l = clean_desc.lower()
-                        if amt > 0 and any(w in desc_l for w in ["addebito", "rid", "spesa", "pagamento", "prelievo", "giroconto verso", "commission"]) and not any(w in desc_l for w in ["stipendio", "accredito", "salary", "rimborso"]):
-                            amt = -abs(amt)
-
-                        key = (d, round(amt, 2), clean_desc[:25].lower())
-                        if key not in seen_keys:
-                            seen_keys.add(key)
-                            is_internal = any(k in desc_l for k in ["giroconto", "trasferimento interno", "internal transfer", "own account", "trade republic", "revolut", "ricarica", "top up"])
-                            rows.append({
-                                "date": d,
-                                "amount": amt,
-                                "currency": "EUR",
-                                "description": clean_desc,
-                                "counterparty": clean_desc,
-                                "category": "Giroconto" if is_internal else ("Entrata" if amt > 0 else "Uscita"),
-                                "balance_after": bal_after,
-                                "is_internal_transfer": is_internal,
-                            })
-                            matched = True
-
-                if not matched:
-                    for pat in text_patterns:
-                        m = pat.match(line)
-                        if m:
-                            raw_date, raw_desc, raw_amt = m.groups()
-                            d = parse_flexible_date(raw_date)
-                            if d is None:
-                                continue
-                            amt = clean_numeric_amount(raw_amt)
-                            if amt == 0.0:
-                                continue
-                            clean_desc = raw_desc.strip()
-                            clean_desc = re.sub(r"^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\s+", "", clean_desc).strip()
-
-                            desc_l = clean_desc.lower()
-                            if amt > 0 and any(w in desc_l for w in ["addebito", "rid", "spesa", "pagamento", "prelievo", "giroconto verso", "commission"]) and not any(w in desc_l for w in ["stipendio", "accredito", "salary", "rimborso"]):
-                                amt = -abs(amt)
-
-                            key = (d, round(amt, 2), clean_desc[:25].lower())
-                            if key in seen_keys:
-                                continue
-                            seen_keys.add(key)
-
-                            is_internal = any(k in desc_l for k in ["giroconto", "trasferimento interno", "internal transfer", "own account", "trade republic", "revolut", "ricarica", "top up"])
-                            rows.append({
-                                "date": d,
-                                "amount": amt,
-                                "currency": "EUR",
-                                "description": clean_desc,
-                                "counterparty": clean_desc,
-                                "category": "Giroconto" if is_internal else ("Entrata" if amt > 0 else "Uscita"),
-                                "is_internal_transfer": is_internal,
-                            })
-                            break
-
-        tx_df = pd.DataFrame(rows).sort_values("date") if rows else pd.DataFrame()
-        s_date = tx_df["date"].min() if not tx_df.empty else None
-        e_date = tx_df["date"].max() if not tx_df.empty else None
-
-        # Ricerca del saldo finale nel testo
-        end_bal = None
-        balance_estimated = False
-        bal_match = re.search(
-            r"(?:saldo\s+(?:finale|contabile|al|disponibile|nuovo)|closing\s+balance|ending\s+balance|final\s+balance|schlusssaldo|endstand|alter\s+kontostand|neuer\s+kontostand)[:\s]+([+-]?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})\s*(?:[-+]|[SH]|DR|CR)?)",
-            full_text,
-            re.IGNORECASE
-        )
-        if bal_match:
-            end_bal = clean_numeric_amount(bal_match.group(1))
-        elif not tx_df.empty:
-            end_bal = float(tx_df["amount"].sum())
-            balance_estimated = True
+        tx_df = build_transactions_frame(analysis.rows)
+        if analysis.period:
+            s_date, e_date = analysis.period
+        else:
+            s_date = tx_df["date"].min() if not tx_df.empty else None
+            e_date = tx_df["date"].max() if not tx_df.empty else None
 
         fn_l = filename.lower()
         if any(k in fn_l for k in ["broker", "titoli", "invest", "portfolio", "deposito titoli", "wertpapier"]):
-            asset_cls = "INVESTMENTS"
-            acc_type = "Brokerage"
+            asset_cls, acc_type = "INVESTMENTS", "Brokerage"
         elif any(k in fn_l for k in ["savings", "deposito", "remunerat", "tagesgeld"]):
-            asset_cls = "HIGH_YIELD_CASH"
-            acc_type = "HighYieldCash"
-        elif "trade republic" in inst_name.lower():
-            asset_cls = "HIGH_YIELD_CASH"
-            acc_type = "HighYieldCash"
+            asset_cls, acc_type = "HIGH_YIELD_CASH", "HighYieldCash"
         else:
-            asset_cls = "LIQUID_CASH"
-            acc_type = "Checking"
+            asset_cls, acc_type = "LIQUID_CASH", "Checking"
 
         return BankStatement(
-            account_id=f"PDF_{Path(filename).stem.replace(' ', '_')}",
-            institution=inst_name,
+            account_id=account_id,
+            institution=inst,
             account_type=acc_type,
             asset_class=asset_cls,
-            currency="EUR",
+            currency=analysis.currency,
             start_date=s_date,
             end_date=e_date,
-            starting_balance=0.0,
-            ending_balance=end_bal or 0.0,
+            starting_balance=analysis.opening if analysis.opening is not None else 0.0,
+            ending_balance=analysis.closing if analysis.closing is not None else 0.0,
             transactions=tx_df,
             source_file=filename,
-            metadata={"raw_text_length": len(full_text), "tables_found": len(extracted_tables), "balance_estimated": balance_estimated}
+            metadata={
+                "raw_text_length": len(extraction.text),
+                "tables_found": len(extraction.tables),
+                "pages": extraction.page_count,
+                "row_source": analysis.row_source,
+                "balance_estimated": analysis.balance_estimated,
+                "closing_source": analysis.closing_source,
+                "opening_explicit": analysis.opening_explicit,
+                "reconciled": analysis.reconciled,
+                "reconciliation_diff": analysis.reconciliation_diff,
+                "movements_incomplete": analysis.movements_incomplete,
+                "iban_tail": analysis.account_tail,
+                "warnings": warnings,
+            },
         )
 
     def _parse_trade_republic_pdf(self, full_text: str, filename: str) -> BankStatement:
@@ -1511,6 +1283,8 @@ class PdfBankParser(BaseBankParser):
         lines = [l.strip() for l in full_text.splitlines() if l.strip()]
         rows = []
         prev_balance = None
+        last_good_date = None
+        bad_dates = 0
         current_day = '01'
         current_month = '01'
         tx_year = current_year
@@ -1580,8 +1354,12 @@ class PdfBankParser(BaseBankParser):
                     elif month_int in [4, 6, 9, 11] and day_int > 30:
                         day_int = 30
                     date_val = pd.to_datetime(f"{tx_year}-{month_int:02d}-{day_int:02d}").normalize()
+                    last_good_date = date_val
                 except Exception:
-                    date_val = pd.Timestamp.now().normalize()
+                    # Mai inventare "oggi": data del movimento precedente (o inizio anno) e avviso all'utente
+                    bad_dates += 1
+                    date_val = last_good_date if last_good_date is not None else \
+                        pd.Timestamp(year=int(tx_year) if str(tx_year).isdigit() else pd.Timestamp.now().year, month=1, day=1)
 
                 # Calcolo segno matematico esatto dal delta del saldo
                 if prev_balance is not None:
@@ -1642,12 +1420,23 @@ class PdfBankParser(BaseBankParser):
                     'is_internal_transfer': is_internal
                 })
 
-        tx_df = pd.DataFrame(rows).sort_values('date') if rows else pd.DataFrame()
+        from .pdf_statement import build_transactions_frame   # import locale: evita il ciclo con questo modulo
+        tx_df = build_transactions_frame(rows)
         s_date = tx_df['date'].min() if not tx_df.empty else None
         e_date = tx_df['date'].max() if not tx_df.empty else None
 
+        tr_warnings: List[str] = []
+        if bad_dates:
+            tr_warnings.append(f"{bad_dates} movimenti con data non leggibile: usata la data del movimento precedente")
+        last_row_balance = float(tx_df['balance_after'].iloc[-1]) if not tx_df.empty else None
+        if end_bal is not None and last_row_balance is not None and abs(end_bal - last_row_balance) > 0.01:
+            tr_warnings.append(
+                f"il saldo finale dichiarato ({end_bal:,.2f}) differisce dall'ultimo saldo di riga ({last_row_balance:,.2f}): "
+                "controlla che non manchino movimenti")
         if end_bal is None and not tx_df.empty and 'balance_after' in tx_df.columns:
             end_bal = float(tx_df['balance_after'].iloc[-1])
+        if not rows:
+            tr_warnings.append("nessun movimento riconosciuto nell'estratto Trade Republic")
 
         return BankStatement(
             account_id="Trade_Republic_Cash",
@@ -1661,7 +1450,7 @@ class PdfBankParser(BaseBankParser):
             ending_balance=end_bal or 0.0,
             transactions=tx_df,
             source_file=filename,
-            metadata={"total_transactions": len(tx_df), "platform": "Trade Republic PDF"}
+            metadata={"total_transactions": len(tx_df), "platform": "Trade Republic PDF", "warnings": tr_warnings}
         )
 
 
@@ -1865,6 +1654,8 @@ def parse_bank_statement(
                 if override_institution:
                     stmt.institution = override_institution
                 return stmt
+        except PdfReadError:
+            raise    # messaggio già pensato per l'utente: non va nascosto dietro "formato non riconosciuto"
         except Exception as e:
             errors.append(f"{type(parser).__name__}: {e}")
             continue

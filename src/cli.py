@@ -22,6 +22,17 @@ PROJECT_ROOT = BASE_DIR.parent if (BASE_DIR.parent / "input").exists() else BASE
 STATEMENTS_DIR = PROJECT_ROOT / "input" / "bank_statements"
 
 
+def _print_data_warnings(summary, lang):
+    """Avvisi di qualità dei dati (PDF illeggibili, saldi che non quadrano, estratti mancanti o vecchi)."""
+    warnings = list(getattr(summary, "load_warnings", []) or [])
+    if not warnings:
+        return
+    print("-" * 70)
+    print(f"⚠️  {'Avvisi sui dati' if lang == 'it' else 'Data warnings'} ({len(warnings)}):")
+    for w in warnings:
+        print(f"  • {w}")
+
+
 def cmd_status(args):
     lang = getattr(args, "lang", "it")
     print("=" * 70)
@@ -31,6 +42,7 @@ def cmd_status(args):
     statements, summary = _data.statements, _data.summary
     print(f"📁 {t('loaded_accounts', lang)}: {len(statements)}")
     if len(statements) == 0:
+        _print_data_warnings(summary, lang)
         if lang == "it":
             print("ℹ️  Nessun estratto conto presente in 'input/bank_statements/'")
             print("👉 Copia o trascina qui i tuoi estratti conto (CSV, Excel o PDF) per avviare l'analisi!")
@@ -62,6 +74,7 @@ def cmd_status(args):
         print(f"🔄 {t('internal_transfers_table', lang)}: {len(summary.internal_transfers)}")
         for _, tr in summary.internal_transfers.iterrows():
             print(f"  [{tr['date']}] €{tr['amount']:.2f}: {tr['from_account']} -> {tr['to_account']}")
+    _print_data_warnings(summary, lang)
     print("=" * 70)
 
 

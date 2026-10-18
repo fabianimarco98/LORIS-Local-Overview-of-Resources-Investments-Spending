@@ -79,6 +79,8 @@ def load_all_bank_statements(
             warnings_list.append(
                 f"{fname}: il file non contiene il saldo, stimato come somma dei movimenti: inserisci il saldo reale in Panoramica"
             )
+        for w in (stmt.metadata or {}).get("warnings", []):
+            warnings_list.append(f"{fname}: {w}")
         aggregator.add_statement(stmt)
         return True
 
@@ -120,7 +122,7 @@ def load_all_bank_statements(
                         warnings_list.append(f"{fpath.name}: {e}")
 
     summary = aggregator.aggregate(as_of_date=cutoff)
-    summary.load_warnings = warnings_list
+    summary.load_warnings = warnings_list + [w for w in aggregator.warnings if w not in warnings_list]
     # Un solo statement per conto (file multipli dello stesso conto già consolidati)
     return aggregator.effective_statements, summary
 
@@ -716,6 +718,11 @@ def apply_user_overrides(
     new_summary.monthly_burn_rate = round(burn, 2)
     new_summary.liquidity_buffer_months = round(max(0.0, cash / burn), 1) if burn > 0 else 0.0
     new_summary.load_warnings = list(getattr(summary, "load_warnings", []))
+    known_accounts = {s.account_id for s in statements}
+    for acc_id in bal_overrides:
+        if acc_id not in known_accounts:
+            new_summary.load_warnings.append(
+                f"saldo manuale non applicato: il conto '{acc_id}' non esiste più (identificativo cambiato?)")
 
     return statements, new_summary
 

@@ -240,6 +240,8 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
             "monthly_burn_rate": s.monthly_burn_rate,
             "liquidity_buffer_months": s.liquidity_buffer_months,
             "internal_transfers_detected": int(len(s.internal_transfers)),
+            # Dati poco affidabili (saldi che non quadrano, estratti mancanti o vecchi): l'assistente deve dirlo
+            "data_quality_warnings": [ctx.scrubber.anonymize_text(str(w)) for w in list(getattr(s, "load_warnings", []) or [])[:8]],
         }
 
     def list_accounts() -> List[Dict[str, Any]]:

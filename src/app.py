@@ -89,6 +89,7 @@ def get_portfolio(as_of: Optional[str] = None):
         "monthly_burn_rate": summary.monthly_burn_rate,
         "liquidity_buffer_months": summary.liquidity_buffer_months,
         "recommended_starting_cash": summary.recommended_starting_cash,
+        "warnings": list(summary.load_warnings),
         "accounts_count": len(summary.accounts_summary),
         "accounts": summary.accounts_summary.to_dict(orient="records"),
         "internal_transfers_count": len(summary.internal_transfers),
