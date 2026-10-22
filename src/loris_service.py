@@ -108,6 +108,8 @@ def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:
     Con almeno 12 mesi di storico le spese sono un block bootstrap dei mesi reali (media e
     deviazione restano quelle indicate); con storico più breve, una normale. Le mensilità extra
     (13ª/14ª, bonus) rilevate negli estratti si aggiungono solo se il reddito non è stato forzato.
+    Scenari di stress: market_shock_path / inflation_shock_path (mensili) e income_gap
+    (mese di inizio, durata) vedi forecast_analysis.py.
     Facoltativi: wage_growth_pct (default = inflazione, cioè reddito che mantiene il potere d'acquisto)
     e market_tail_df (Student-t con quei gradi di libertà al posto della log-normale).
     """
@@ -151,6 +153,9 @@ def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:
         recurring_df=None,
         shocks_df=None,
         expense_history=stats.get("monthly_expenses_history"),
+        market_shock_path=p.get("market_shock_path"),
+        inflation_shock_path=p.get("inflation_shock_path"),
+        income_gap=p.get("income_gap"),
         **bonus,
     )
     res["params"] = p

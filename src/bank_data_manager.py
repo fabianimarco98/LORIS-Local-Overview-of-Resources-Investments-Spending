@@ -223,6 +223,7 @@ def categorize_transactions(
     return df
 
 
+ESSENTIAL_CATEGORIES = frozenset({"Affitto", "Bollette & Utenze", "Spesa & Alimentari", "Salute & Farmacia", "Trasporti & Viaggi"})
 BONUS_MONTH_FACTOR = 1.5     # un mese di stipendio > 1,5 volte quello ordinario è una mensilità extra (13ª/14ª, bonus)
 SALARY_CATEGORIES = ("Stipendio", "Stipendio & Compensi")
 
@@ -423,7 +424,7 @@ def compute_bank_monthly_statistics(
         top_payees = pd.DataFrame()
 
     # Spese essenziali vs discrezionali
-    essential_cats = {"Affitto", "Bollette & Utenze", "Spesa & Alimentari", "Salute & Farmacia", "Trasporti & Viaggi"}
+    essential_cats = ESSENTIAL_CATEGORIES
     if not debits.empty:
         ess_total = abs(float(debits[debits["category"].isin(essential_cats)]["amount"].sum()))
         disc_total = abs(float(debits[~debits["category"].isin(essential_cats)]["amount"].sum()))
@@ -486,6 +487,19 @@ def compute_bank_monthly_statistics(
         "wallet_stats": w_stats,
         "active_filter": filter_source,
     }
+
+
+def essential_monthly_spend(df_tx: pd.DataFrame) -> float:
+    """Spesa mensile media sulle sole categorie essenziali (stessi mesi di `monthly_spending_series`)."""
+    series = monthly_spending_series(df_tx)
+    if series.empty:
+        return 0.0
+    deb = spending_debits(df_tx)
+    if "category" not in deb.columns:
+        return 0.0
+    ess = deb[deb["category"].isin(ESSENTIAL_CATEGORIES)]
+    by_month = ess.assign(_m=pd.to_datetime(ess["date"]).dt.to_period("M")).groupby("_m")["amount"].sum().abs()
+    return float(by_month.reindex(series.index).fillna(0.0).mean())
 
 
 def detect_recurring_from_statements(df_tx: pd.DataFrame) -> pd.DataFrame:

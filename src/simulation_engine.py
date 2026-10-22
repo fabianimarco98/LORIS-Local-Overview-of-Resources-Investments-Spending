@@ -49,6 +49,11 @@ def _rescale_history(hist: np.ndarray, target_mean: Optional[float], target_std:
     return np.maximum(out, 0.0)
 
 
+def _binomial_se_pct(p: float, n: int) -> float:
+    """Errore standard (in punti percentuali) di una probabilità stimata con n scenari."""
+    return float(np.sqrt(max(p * (1.0 - p), 0.0) / max(n, 1)) * 100.0)
+
+
 def standardized_shocks(rng: np.random.Generator, size: int, tail_df: Optional[float]) -> np.ndarray:
     """Shock a media 0 e varianza 1: normali, oppure Student-t (code grasse) riscalate."""
     if tail_df is None:
@@ -118,6 +123,9 @@ def run_simulation(
     securities_stamp: float = 0.0,
     account_stamp_eur: float = 0.0,
     account_stamp_threshold: float = 0.0,
+    market_shock_path: Optional[Union[np.ndarray, List[float]]] = None,
+    inflation_shock_path: Optional[Union[np.ndarray, List[float]]] = None,
+    income_gap: Optional[Tuple[int, int]] = None,
     expense_history: Optional[Union[np.ndarray, List[float]]] = None,
     bootstrap_block: int = 3,
 ) -> Dict[str, Any]:
@@ -133,6 +141,10 @@ def run_simulation(
         sulla liquidità quando il saldo supera account_stamp_threshold (addebitato a rate mensili).
     market_tail_df: gradi di libertà della Student-t per i rendimenti (None = log-normale).
     phase2_start: dal quale mese vale `salary2` (None = non esiste una seconda fase).
+    market_shock_path / inflation_shock_path: rendimenti / inflazione MENSILI deterministici che
+        sostituiscono quelli casuali nei primi len(path) mesi (scenari di stress); poi si torna al modello.
+        I numeri casuali vengono comunque estratti, così scenari diversi restano confrontabili.
+    income_gap: (mese di inizio, numero di mesi) in cui il reddito (bonus compresi) è zero.
     expense_history: spese mensili storiche (mesi completi, in euro di oggi). Con almeno
         MIN_BOOTSTRAP_MONTHS valori le spese simulate sono un block bootstrap della storia
         (blocchi di `bootstrap_block` mesi): conserva asimmetria, mesi eccezionali e
@@ -192,6 +204,8 @@ def run_simulation(
     stamp_m = float(account_stamp_eur) / 12.0
     phase2_dt = pd.to_datetime(phase2_start) if phase2_start is not None else None
     mu_log_m, sd_log_m = lognormal_monthly_params(mkt_mean, mkt_std)
+    mkt_path = None if market_shock_path is None else np.asarray(market_shock_path, dtype=float)
+    infl_path = None if inflation_shock_path is None else np.asarray(inflation_shock_path, dtype=float)
 
     # Con volatilità empirica (monthly_expenses_std dagli estratti) lo shock comune è già incluso nella std osservata:
     # applicarlo di nuovo gonfierebbe rischio e probabilità di esaurire la cassa.
@@ -258,6 +272,8 @@ def run_simulation(
             _mu_inf = (1 + infl_mean) ** (1 / 12) - 1
             _sd_inf = infl_std / np.sqrt(12)
             minf = rng.normal(_mu_inf, _sd_inf, n_sims)
+        if infl_path is not None and m < len(infl_path):
+            minf = np.full(n_sims, infl_path[m])
 
         price_level = price_level * (1 + minf)
         if m > 0 and date.month == 1:
@@ -268,6 +284,8 @@ def run_simulation(
             mret = market_monthly[:, m]
         else:
             mret = np.expm1(mu_log_m + sd_log_m * standardized_shocks(rng, n_sims, market_tail_df))
+        if mkt_path is not None and m < len(mkt_path):
+            mret = np.full(n_sims, mkt_path[m])
 
         # 3. Interessi di cassa / scoperto
         interest = np.where(cash >= 0, cash * cash_rate_m, cash * overdraft_rate_m)
@@ -288,6 +306,8 @@ def run_simulation(
                 inc += extra2 if is_p2 else extra1
 
         inc *= (1 + wage_growth) ** (m // 12)
+        if income_gap is not None and income_gap[0] <= m < income_gap[0] + income_gap[1]:
+            inc = 0.0
         income_sched[m] = inc
         cash = cash + inc
 
@@ -393,100 +413,8 @@ def run_simulation(
         "p90_real": float(p90r),
         "prob_ruin": float((cash_h.min(axis=1) < 0).mean() * 100),
         "prob_forced_sale": float((liq_h.sum(axis=1) > 0).mean() * 100),
+        "prob_ruin_se": _binomial_se_pct((cash_h.min(axis=1) < 0).mean(), n_sims),
+        "prob_forced_sale_se": _binomial_se_pct((liq_h.sum(axis=1) > 0).mean(), n_sims),
+        "n_sims": int(n_sims),
         "initial_nw": float(starting_cash + starting_inv),
     }
-
-
-def run_historical_backtest(recurring_df, shocks_df, macro_df, start="2026-10-01", horizon_months=None):
-    """Backtest storico usando serie reali S&P 500 e CPI dal 1970."""
-    ANNI = np.arange(1970, 2025)
-    SP500 = np.array([
-        4.0, 14.3, 19.0, -14.7, -26.5, 37.2, 23.8, -7.2, 6.6, 18.4,
-        32.4, -4.9, 21.5, 22.6, 6.3, 31.7, 18.7, 5.3, 16.6, 31.7,
-        -3.1, 30.5, 7.6, 10.1, 1.3, 37.6, 23.0, 33.4, 28.6, 21.0,
-        -9.1, -11.9, -22.1, 28.7, 10.9, 4.9, 15.8, 5.5, -37.0, 26.5,
-        15.1, 2.1, 16.0, 32.4, 13.7, 1.4, 12.0, 21.8, -4.4, 31.5,
-        18.4, 28.7, -18.1, 26.3, 25.0,
-    ]) / 100
-    CPI = np.array([
-        5.8, 4.3, 3.3, 6.2, 11.1, 9.1, 5.7, 6.5, 7.6, 11.3,
-        13.5, 10.3, 6.1, 3.2, 4.3, 3.5, 1.9, 3.7, 4.1, 4.8,
-        5.4, 4.2, 3.0, 3.0, 2.6, 2.8, 2.9, 2.3, 1.6, 2.2,
-        3.4, 2.8, 1.6, 2.3, 2.7, 3.4, 3.2, 2.8, 3.8, -0.4,
-        1.6, 3.2, 2.1, 1.5, 1.6, 0.1, 1.3, 2.1, 2.4, 1.8,
-        1.2, 4.7, 8.0, 4.1, 3.0,
-    ]) / 100
-
-    sp500_m = (1 + np.repeat(SP500, 12)) ** (1 / 12) - 1
-    cpi_m = (1 + np.repeat(CPI, 12)) ** (1 / 12) - 1
-    n_months_hist = len(sp500_m)
-    months = horizon_months if horizon_months else sim_months(start)
-
-    # Finestre sovrapposte
-    n_windows = max(1, n_months_hist - months + 1)
-    mkt_mat = np.array([sp500_m[i:i + months] for i in range(n_windows)])
-    inf_mat = np.array([cpi_m[i:i + months] for i in range(n_windows)])
-
-    res_backtest = run_simulation(start=start, horizon_months=months, n_sims=n_windows, seed=42,
-                                  recurring_df=recurring_df, shocks_df=shocks_df,
-                                  macro_df=macro_df,
-                                  market_monthly=mkt_mat, inflation_monthly=inf_mat)
-
-    # Finestre disgiunte
-    step = months
-    disjoint_starts = list(range(0, n_months_hist - months + 1, step))
-    mkt_dis = np.array([sp500_m[i:i + months] for i in disjoint_starts])
-    inf_dis = np.array([cpi_m[i:i + months] for i in disjoint_starts])
-    res_disjoint = run_simulation(start=start, horizon_months=months, n_sims=len(disjoint_starts), seed=42,
-                                  recurring_df=recurring_df, shocks_df=shocks_df,
-                                  macro_df=macro_df,
-                                  market_monthly=mkt_dis, inflation_monthly=inf_dis)
-
-    return res_backtest, res_disjoint
-
-
-def run_tornado_analysis(recurring_df, shocks_df, macro_df, start="2026-10-01", horizon_months=None, n_sims=3000):
-    """Analisi tornado di sensibilità sui parametri chiave."""
-    base_res = run_simulation(start=start, horizon_months=horizon_months, n_sims=n_sims, seed=11,
-                              recurring_df=recurring_df, shocks_df=shocks_df, macro_df=macro_df)
-    base_p50 = base_res["p50"]
-
-    def _rec_scaled(factor):
-        if recurring_df is None or recurring_df.empty:
-            return recurring_df
-        r = recurring_df.copy()
-        r["min_cost"] *= factor
-        r["max_cost"] *= factor
-        return r
-
-    variations = [
-        ("Spese ricorrenti (−10% ↔ +10%)", dict(recurring_df=_rec_scaled(0.9)), dict(recurring_df=_rec_scaled(1.1))),
-        ("Shock programmati (−20% ↔ +20%)", dict(shock_scale=0.8), dict(shock_scale=1.2)),
-        ("Entrate mensili (1.800€ ↔ 2.500€)", dict(monthly_income=1800), dict(monthly_income=2500)),
-        ("Inflazione media (1,5% ↔ 4,5%)", dict(infl_mean=0.015), dict(infl_mean=0.045)),
-        ("Rendimento mercato (2% ↔ 10%)", dict(mkt_mean=0.02), dict(mkt_mean=0.10)),
-        ("Interesse liquidità (0% ↔ 3%)", dict(cash_rate=0.0), dict(cash_rate=0.03)),
-        ("Volatilità mercato (8% ↔ 20%)", dict(mkt_std=0.08), dict(mkt_std=0.20)),
-        ("Tasso di scoperto (5% ↔ 15%)", dict(overdraft_rate=0.05), dict(overdraft_rate=0.15)),
-        ("PAC (0€ ↔ 250€)", dict(pac=0), dict(pac=250)),
-    ]
-
-    base_kwargs = dict(start=start, horizon_months=horizon_months, n_sims=n_sims, seed=11,
-                       recurring_df=recurring_df, shocks_df=shocks_df, macro_df=macro_df)
-    rows = []
-    for label, low_kwargs, high_kwargs in variations:
-        res_lo = run_simulation(**{**base_kwargs, **low_kwargs})
-        res_hi = run_simulation(**{**base_kwargs, **high_kwargs})
-        delta_lo = res_lo["p50"] - base_p50
-        delta_hi = res_hi["p50"] - base_p50
-        rows.append({
-            "parametro": label,
-            "delta_low": float(delta_lo),
-            "delta_high": float(delta_hi),
-            "range": float(abs(delta_hi - delta_lo)),
-            "p50_low": float(res_lo["p50"]),
-            "p50_high": float(res_hi["p50"]),
-        })
-
-    df_tornado = pd.DataFrame(rows).sort_values("range", ascending=False)
-    return df_tornado, base_p50
