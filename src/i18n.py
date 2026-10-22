@@ -345,6 +345,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "it": "Volatilità Annua Mercato (%)",
         "en": "Annual Market Volatility (%)",
     },
+    "annual_market_volatility": {
+        "it": "Volatilità Annua Mercato (%)",
+        "en": "Annual Market Volatility (%)",
+    },
     "annual_inflation": {
         "it": "Inflazione Annua Attesa (%)",
         "en": "Expected Annual Inflation (%)",

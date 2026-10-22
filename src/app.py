@@ -46,6 +46,11 @@ class SimulationRequest(BaseModel):
     starting_cash: Optional[float] = None
     starting_inv: Optional[float] = None
     shock_scale: float = 1.0
+    annual_return_pct: Optional[float] = Field(None, ge=-20, le=30)
+    annual_volatility_pct: Optional[float] = Field(None, ge=0, le=60)
+    annual_inflation_pct: Optional[float] = Field(None, ge=0, le=20)
+    annual_fee_pct: Optional[float] = Field(None, ge=0, le=5)
+    wage_growth_pct: Optional[float] = Field(None, ge=-10, le=20)
 
 
 class LLMQueryRequest(BaseModel):
@@ -168,6 +173,11 @@ def run_simulation(req: SimulationRequest):
         starting_cash=req.starting_cash,
         starting_inv=req.starting_inv,
         shock_scale=req.shock_scale,
+        annual_return_pct=req.annual_return_pct,
+        annual_volatility_pct=req.annual_volatility_pct,
+        annual_inflation_pct=req.annual_inflation_pct,
+        annual_fee_pct=req.annual_fee_pct,
+        wage_growth_pct=req.wage_growth_pct,
     )
 
     tot_wealth = res["cash_history"] + res["invest_history"]

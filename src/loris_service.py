@@ -27,7 +27,9 @@ FORECAST_DEFAULTS: Dict[str, Any] = {
     "seed": 42,
     "monthly_investment": 100.0,
     "annual_return_pct": 5.0,
+    "annual_volatility_pct": 15.0,   # azionario globale: ~15-16% annuo
     "annual_inflation_pct": 2.5,
+    "annual_fee_pct": 0.2,           # TER medio di un ETF globale
     "cash_rate_pct": 2.5,
     "strategy": "dynamic",
     "cash_threshold": 5000.0,
@@ -103,6 +105,8 @@ def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:
     Monte Carlo calibrato sui dati reali (reddito, spesa media e volatilità dagli estratti).
     Qualsiasi parametro di FORECAST_DEFAULTS o di calibrazione (starting_cash, starting_inv,
     monthly_income, monthly_expenses_mean, monthly_expenses_std, start, shock_scale) può essere sovrascritto.
+    Facoltativi: wage_growth_pct (default = inflazione, cioè reddito che mantiene il potere d'acquisto)
+    e market_tail_df (Student-t con quei gradi di libertà al posto della log-normale).
     """
     p = {**FORECAST_DEFAULTS, **{k: v for k, v in params.items() if v is not None}}
     stats, summary = data.stats, data.summary
@@ -119,6 +123,10 @@ def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:
         starting_inv=float(p.get("starting_inv", summary.total_investments)),
         cash_rate=float(p["cash_rate_pct"]) / 100.0,
         mkt_mean=float(p["annual_return_pct"]) / 100.0,
+        mkt_std=float(p["annual_volatility_pct"]) / 100.0,
+        annual_fee=float(p["annual_fee_pct"]) / 100.0,
+        wage_growth=None if p.get("wage_growth_pct") is None else float(p["wage_growth_pct"]) / 100.0,
+        market_tail_df=None if p.get("market_tail_df") is None else float(p["market_tail_df"]),
         infl_mean=float(p["annual_inflation_pct"]) / 100.0,
         monthly_expenses_mean=float(p.get("monthly_expenses_mean", stats.get("monthly_expenses_mean", 0.0))),
         monthly_expenses_std=float(p.get("monthly_expenses_std", stats.get("monthly_expenses_std", 0.0))),

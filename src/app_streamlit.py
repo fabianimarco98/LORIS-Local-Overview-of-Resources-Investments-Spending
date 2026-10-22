@@ -1205,6 +1205,13 @@ with tab_sim:
                 value=6.0,
                 step=0.5
             ) / 100.0
+            user_volatility = st.slider(
+                t("annual_market_volatility", lang) + ":",
+                min_value=5.0,
+                max_value=30.0,
+                value=float(svc.FORECAST_DEFAULTS["annual_volatility_pct"]),
+                step=1.0
+            ) / 100.0
             user_inflation = st.slider(
                 t("annual_inflation", lang) + ":",
                 min_value=0.0,
@@ -1225,6 +1232,7 @@ with tab_sim:
         starting_inv=starting_inv_val,
         cash_rate_pct=current_cash_rate * 100.0,
         annual_return_pct=user_mkt_return * 100.0,
+        annual_volatility_pct=user_volatility * 100.0,
         annual_inflation_pct=user_inflation * 100.0,
         monthly_expenses_mean=user_burn,
         monthly_expenses_std=user_vol,

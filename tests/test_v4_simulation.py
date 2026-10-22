@@ -91,6 +91,7 @@ class TestV4SpecialeIntegration(unittest.TestCase):
             recurring_df=None,
             shocks_df=None,
             macro_df=None,
+            monthly_income=stats["detected_salary"],
             monthly_expenses_mean=stats["monthly_expenses_mean"],
             monthly_expenses_std=stats["monthly_expenses_std"],
         )

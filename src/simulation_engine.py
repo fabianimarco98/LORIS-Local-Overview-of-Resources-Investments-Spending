@@ -8,7 +8,8 @@ Motore di simulazione stocastica Monte Carlo universale per finanza personale:
 - Calibrazione empirica automatica dai dati reali degli estratti conto
 - Rischio di scoperto di liquidità (Ruin Probability / Cash Depletion)
 - Orizzonte temporale flessibile (12, 24, 36, 60 mesi o orizzonte personalizzato)
-- Rendimenti azionari e inflazione stocastica cumulata
+- Rendimenti azionari log-normali (o Student-t) e inflazione stocastica per scenario
+- Crescita salariale e costi di prodotto (TER) esplicitati
 - Gestione shock finanziari programmati e liquidazione forzata con fiscalità
 """
 
@@ -20,10 +21,28 @@ from pathlib import Path
 
 # Orizzonte di default quando non specificato
 DEFAULT_HORIZON_MONTHS = 36
-PHASE_2_DATE = pd.to_datetime("2029-01-01")
-AUSTRIAN_KEST = 0.275
 DEFAULT_TAX_RATE = 0.26
-EXTRA_MONTHS = (3, 6, 9, 12)
+EXTRA_MONTHS = (3, 6, 9, 12)   # solo per macro_df con salary_phase_*_extra (compatibilità)
+
+
+def lognormal_monthly_params(annual_mean: float, annual_std: float) -> Tuple[float, float]:
+    """
+    Parametri (mu, sigma) del log-rendimento MENSILE tali che il rendimento annuo semplice
+    abbia media `annual_mean` e deviazione standard `annual_std` (E[1+R] = 1+mean, esatto).
+    Un rendimento normale con media geometrica fissata renderebbe in media circa mean - std²/2.
+    """
+    gross = max(1.0 + annual_mean, 1e-6)
+    s2 = np.log1p((max(annual_std, 0.0) / gross) ** 2)
+    return (np.log(gross) - s2 / 2.0) / 12.0, float(np.sqrt(s2 / 12.0))
+
+
+def standardized_shocks(rng: np.random.Generator, size: int, tail_df: Optional[float]) -> np.ndarray:
+    """Shock a media 0 e varianza 1: normali, oppure Student-t (code grasse) riscalate."""
+    if tail_df is None:
+        return rng.standard_normal(size)
+    if tail_df <= 2:
+        raise ValueError("market_tail_df deve essere > 2 (varianza finita)")
+    return rng.standard_t(tail_df, size) / np.sqrt(tail_df / (tail_df - 2.0))
 
 
 def sim_months(start: Union[str, pd.Timestamp], end: Optional[Union[str, pd.Timestamp]] = None) -> int:
@@ -78,10 +97,20 @@ def run_simulation(
     macro_df: Optional[pd.DataFrame] = None,
     monthly_expenses_mean: Optional[float] = None,
     monthly_expenses_std: Optional[float] = None,
+    wage_growth: Optional[float] = None,
+    annual_fee: Optional[float] = None,
+    market_tail_df: Optional[float] = None,
+    phase2_start: Optional[Union[str, pd.Timestamp]] = None,
 ) -> Dict[str, Any]:
     """
     Esegue la simulazione Monte Carlo su N scenari per l'orizzonte temporale specificato.
     Accetta parametri derivati empiricamente dagli estratti conto o configurazioni custom.
+
+    wage_growth: crescita annua del reddito (aumento una volta l'anno); default = inflazione attesa,
+        cioè potere d'acquisto del reddito costante. 0 = reddito nominale fisso.
+    annual_fee: costi annui di prodotto (TER) sottratti al rendimento degli investimenti.
+    market_tail_df: gradi di libertà della Student-t per i rendimenti (None = log-normale).
+    phase2_start: dal quale mese vale `salary2` (None = non esiste una seconda fase).
     """
     start_dt = pd.to_datetime(start if start is not None else default_start())
 
@@ -98,13 +127,13 @@ def run_simulation(
 
     # 2. Defaults e parametri macroeconomici
     P = macro_df["value"].astype(float) if macro_df is not None else {}
-    pac = float(P.get("monthly_investment", 80.0) if pac is None else pac)
+    pac = float(P.get("monthly_investment", 0.0) if pac is None else pac)
 
     # Entrate mensili
     if monthly_income is not None:
         inc_base = float(monthly_income)
         # Se l'utente specifica il suo reddito mensile atteso,
-        # usa un reddito costante senza iniettare scatti o bonus PhD a meno che richiesti
+        # usa un reddito costante senza iniettare scatti o bonus a meno che richiesti
         sal2 = float(salary2) if salary2 is not None else inc_base
         extra1 = float(extra_phase1) if extra_phase1 is not None else 0.0
         extra2 = float(extra_phase2) if extra_phase2 is not None else 0.0
@@ -114,8 +143,8 @@ def run_simulation(
         extra1 = float(extra_phase1) if extra_phase1 is not None else 0.0
         extra2 = float(extra_phase2) if extra_phase2 is not None else 0.0
     else:
-        inc_base = float(P.get("salary_phase_1", 2000.0))
-        sal2 = float(P.get("salary_phase_2", 2000.0 if "salary_phase_2" in P else inc_base) if salary2 is None else salary2)
+        inc_base = float(P.get("salary_phase_1", 0.0))
+        sal2 = float(P.get("salary_phase_2", inc_base) if salary2 is None else salary2)
         extra1 = float(P.get("salary_phase_1_extra", 0.0) if extra_phase1 is None else extra_phase1)
         extra2 = float(P.get("salary_phase_2_extra", 0.0 if macro_df is None else 0.0) if extra_phase2 is None else extra_phase2)
 
@@ -124,10 +153,15 @@ def run_simulation(
     mkt_mean = float(P.get("annual_market_return_mean", 0.06) if mkt_mean is None else mkt_mean)
     mkt_std = float(P.get("annual_market_return_std", 0.12) if mkt_std is None else mkt_std)
 
-    starting_cash = float(P.get("starting_cash", 3000.0) if starting_cash is None else starting_cash)
-    starting_inv = float(P.get("starting_investments", 1000.0) if starting_inv is None else starting_inv)
+    starting_cash = float(P.get("starting_cash", 0.0) if starting_cash is None else starting_cash)
+    starting_inv = float(P.get("starting_investments", 0.0) if starting_inv is None else starting_inv)
     cash_rate = float(P.get("cash_interest_gross", 0.015) if cash_rate is None else cash_rate)
     eff_tax_rate = float(P.get("capital_gains_tax", DEFAULT_TAX_RATE) if tax_rate is None else tax_rate)
+    wage_growth = infl_mean if wage_growth is None else float(wage_growth)
+    annual_fee = float(P.get("annual_fee", 0.0) if annual_fee is None else annual_fee)
+    fee_factor_m = (1.0 - annual_fee) ** (1 / 12)
+    phase2_dt = pd.to_datetime(phase2_start) if phase2_start is not None else None
+    mu_log_m, sd_log_m = lognormal_monthly_params(mkt_mean, mkt_std)
 
     # Con volatilità empirica (monthly_expenses_std dagli estratti) lo shock comune è già incluso nella std osservata:
     # applicarlo di nuovo gonfierebbe rischio e probabilità di esaurire la cassa.
@@ -166,8 +200,8 @@ def run_simulation(
     cb_h = np.zeros((n_sims, months))
     income_sched = np.zeros(months)
 
-    price_level = 1.0
-    year_level = 1.0
+    price_level = np.ones(n_sims)       # livello dei prezzi PER SCENARIO (l'inflazione è incerta)
+    year_level = np.ones(n_sims)
     log_common = np.zeros(n_sims)
 
     for m in range(months):
@@ -181,18 +215,15 @@ def run_simulation(
             _sd_inf = infl_std / np.sqrt(12)
             minf = rng.normal(_mu_inf, _sd_inf, n_sims)
 
-        mean_inf_step = float(np.mean(minf))
-        price_level *= (1 + mean_inf_step)
+        price_level = price_level * (1 + minf)
         if m > 0 and date.month == 1:
-            year_level = price_level
+            year_level = price_level.copy()
 
         # 2. Rendimento di mercato stocastico
         if market_monthly is not None:
             mret = market_monthly[:, m]
         else:
-            _mu_m = (1 + mkt_mean) ** (1 / 12) - 1
-            _sd_m = mkt_std / np.sqrt(12)
-            mret = rng.normal(_mu_m, _sd_m, n_sims)
+            mret = np.expm1(mu_log_m + sd_log_m * standardized_shocks(rng, n_sims, market_tail_df))
 
         # 3. Interessi di cassa / scoperto
         interest = np.where(cash >= 0, cash * cash_rate_m, cash * overdraft_rate_m)
@@ -200,7 +231,7 @@ def run_simulation(
         int_h[:, m] = interest
 
         # 4. Entrate del mese
-        is_p2 = date >= PHASE_2_DATE
+        is_p2 = phase2_dt is not None and date >= phase2_dt
         inc = sal2 if is_p2 else inc_base
         if bonus_months is not None:
             if date.month in bonus_months:
@@ -210,13 +241,14 @@ def run_simulation(
             if date.month in EXTRA_MONTHS and (extra1 > 0 or extra2 > 0):
                 inc += extra2 if is_p2 else extra1
 
+        inc *= (1 + wage_growth) ** (m // 12)
         income_sched[m] = inc
         cash = cash + inc
 
         # 5. PAC (Piano di Accumulo Capitale)
         pac_m = np.where(cash >= pac, pac, 0.0)   # non si investe denaro che non c'è
         cash = cash - pac_m
-        invest = invest * (1 + mret) + pac_m
+        invest = invest * (1 + mret) * fee_factor_m + pac_m
         cost_basis = cost_basis + pac_m
 
         # 6. Spese del mese
@@ -277,7 +309,7 @@ def run_simulation(
 
     gains = np.maximum(0, invest - cost_basis)
     nw_final = cash + invest - gains * eff_tax_rate
-    nw_final_real = nw_final / price_level
+    nw_final_real = nw_final / price_level      # deflazionato con il livello prezzi di ciascuno scenario
 
     p5, p10, p25, p50, p75, p90, p95 = np.percentile(nw_final, [5, 10, 25, 50, 75, 90, 95])
     p10r, p50r, p90r = np.percentile(nw_final_real, [10, 50, 90])
@@ -299,7 +331,8 @@ def run_simulation(
         "nw": cash_h + inv_h,
         "nw_final": nw_final,
         "nw_final_real": nw_final_real,
-        "price_level_final": float(price_level),
+        "price_level_final": float(price_level.mean()),
+        "price_level_paths": price_level,
         "p5": float(p5),
         "p10": float(p10),
         "p25": float(p25),
@@ -314,16 +347,6 @@ def run_simulation(
         "prob_forced_sale": float((liq_h.sum(axis=1) > 0).mean() * 100),
         "initial_nw": float(starting_cash + starting_inv),
     }
-
-
-def run_simulation_corr(panel, recurring_df, shocks_df=None, macro_df=None,
-                        start="2026-10-01", n_sims=5000, seed=42, shock_scale=1.0,
-                        horizon_months=None):
-    """Esegue simulazione con matrice di covarianza sulle spese se panel disponibile."""
-    res = run_simulation(start=start, horizon_months=horizon_months, n_sims=n_sims, seed=seed,
-                         recurring_df=recurring_df, shocks_df=shocks_df,
-                         shock_scale=shock_scale, macro_df=macro_df)
-    return res
 
 
 def run_historical_backtest(recurring_df, shocks_df, macro_df, start="2026-10-01", horizon_months=None):

@@ -345,12 +345,14 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
     def run_forecast(
         horizon_months: int = 24, n_sims: int = 1000, monthly_investment: float = 100.0,
         annual_return_pct: float = 5.0, annual_inflation_pct: float = 2.5,
+        annual_volatility_pct: float = 15.0,
     ) -> Dict[str, Any]:
         import loris_service as svc
         data = svc.PortfolioData([], s, ctx.df_tx, ctx.stats)
         res = svc.run_forecast(
             data, horizon_months=horizon_months, n_sims=n_sims, monthly_investment=monthly_investment,
             annual_return_pct=annual_return_pct, annual_inflation_pct=annual_inflation_pct,
+            annual_volatility_pct=annual_volatility_pct,
             cash_rate_pct=ctx.cash_rate_pct,
         )
         prm = res["params"]
@@ -361,6 +363,7 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
                 "monthly_income": float(ctx.stats.get("detected_salary", 0.0)),
                 "monthly_expenses_mean": float(ctx.stats.get("monthly_expenses_mean", 0.0)),
                 "monthly_investment": prm["monthly_investment"], "annual_return_pct": prm["annual_return_pct"],
+                "annual_volatility_pct": prm["annual_volatility_pct"], "annual_fee_pct": prm["annual_fee_pct"],
             },
             "net_worth_p5_pessimistic": res["p5"],
             "net_worth_p50_median": res["p50"],
@@ -432,6 +435,7 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
               "n_sims": {"type": "integer", "minimum": 200, "maximum": 3000},
               "monthly_investment": {"type": "number", "minimum": 0, "maximum": 100000},
               "annual_return_pct": {"type": "number", "minimum": -20, "maximum": 30},
+              "annual_volatility_pct": {"type": "number", "minimum": 0, "maximum": 60},
               "annual_inflation_pct": {"type": "number", "minimum": 0, "maximum": 20}},
              run_forecast),
     ])
