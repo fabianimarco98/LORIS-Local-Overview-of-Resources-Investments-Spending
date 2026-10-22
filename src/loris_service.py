@@ -105,11 +105,19 @@ def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:
     Monte Carlo calibrato sui dati reali (reddito, spesa media e volatilità dagli estratti).
     Qualsiasi parametro di FORECAST_DEFAULTS o di calibrazione (starting_cash, starting_inv,
     monthly_income, monthly_expenses_mean, monthly_expenses_std, start, shock_scale) può essere sovrascritto.
+    Con almeno 12 mesi di storico le spese sono un block bootstrap dei mesi reali (media e
+    deviazione restano quelle indicate); con storico più breve, una normale. Le mensilità extra
+    (13ª/14ª, bonus) rilevate negli estratti si aggiungono solo se il reddito non è stato forzato.
     Facoltativi: wage_growth_pct (default = inflazione, cioè reddito che mantiene il potere d'acquisto)
     e market_tail_df (Student-t con quei gradi di libertà al posto della log-normale).
     """
     p = {**FORECAST_DEFAULTS, **{k: v for k, v in params.items() if v is not None}}
     stats, summary = data.stats, data.summary
+    income_overridden = "monthly_income" in params and params["monthly_income"] is not None
+    bonus = {} if income_overridden else {
+        "bonus_months": tuple(stats.get("salary_bonus_months", ())),
+        "bonus_amount": float(stats.get("salary_bonus_amount", 0.0)),
+    }
     res = se.run_simulation(
         start=p.get("start") or se.default_start(),
         horizon_months=int(p["horizon_months"]),
@@ -134,6 +142,8 @@ def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:
         shock_scale=float(p.get("shock_scale", 1.0)),
         recurring_df=None,
         shocks_df=None,
+        expense_history=stats.get("monthly_expenses_history"),
+        **bonus,
     )
     res["params"] = p
     return res

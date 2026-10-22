@@ -21,7 +21,10 @@ import pandas as pd
 
 import banking
 from banking.parsers import BankStatement, parse_bank_statement, GenericBankParser
-from banking.portfolio import PortfolioAggregator, PortfolioSummary, monthly_spending_series, spending_debits
+from banking.portfolio import (
+    PortfolioAggregator, PortfolioSummary, income_credits, monthly_spending_series, partial_edge_months,
+    refund_credits, spending_debits,
+)
 from banking.anonymizer import PIIScrubber
 from banking.local_llm import LocalLLMClient
 from banking.user_profile import employer_keywords, extra_keywords
@@ -220,6 +223,46 @@ def categorize_transactions(
     return df
 
 
+BONUS_MONTH_FACTOR = 1.5     # un mese di stipendio > 1,5 volte quello ordinario è una mensilità extra (13ª/14ª, bonus)
+SALARY_CATEGORIES = ("Stipendio", "Stipendio & Compensi")
+
+
+def detect_salary_profile(df: pd.DataFrame, credits: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Reddito da lavoro dagli accrediti di stipendio SOMMATI PER MESE (uno stipendio spezzato in due
+    bonifici non va dimezzato). Mesi parziali ai bordi esclusi.
+    - base: mediana mensile (uno stipendio ordinario)
+    - con 12 mesi completi (tutti i mesi di calendario): mesi bonus = media del mese > 1,5 x base
+    - annual: reddito annuo stimato = 12 x base + mensilità extra
+    Ritorna base = 0 se non ci sono accrediti di stipendio riconosciuti.
+    """
+    empty = {"base": 0.0, "bonus_months": (), "bonus_amount": 0.0, "annual": 0.0}
+    sal = credits[credits["category"].isin(SALARY_CATEGORIES)] if "category" in credits.columns else credits.iloc[0:0]
+    if sal.empty:
+        return empty
+    dates = pd.to_datetime(df["date"])
+    data_months = sorted(dates.dt.to_period("M").unique())
+    skip = set(partial_edge_months(df))
+    months = [m for m in data_months if m not in skip] or data_months
+    by_month = sal.assign(_m=pd.to_datetime(sal["date"]).dt.to_period("M")).groupby("_m")["amount"].sum()
+    series = by_month.reindex(months).fillna(0.0)
+    paid = series[series > 0]
+    if paid.empty:
+        return empty
+    base = float(paid.median())
+    bonus_months: Tuple[int, ...] = ()
+    bonus_amount = 0.0
+    if len(series) >= 12:
+        per_cal = series.groupby(series.index.month).mean()
+        if len(per_cal) == 12:
+            extra = per_cal[per_cal > BONUS_MONTH_FACTOR * base]
+            if not extra.empty:
+                bonus_months = tuple(int(m) for m in extra.index)
+                bonus_amount = float((extra - base).mean())
+    return {"base": base, "bonus_months": bonus_months, "bonus_amount": bonus_amount,
+            "annual": 12 * base + bonus_amount * len(bonus_months)}
+
+
 def compute_bank_monthly_statistics(
     df_tx: pd.DataFrame,
     filter_source: str = "all"
@@ -237,6 +280,10 @@ def compute_bank_monthly_statistics(
             "monthly_expenses_mean": 0.0,
             "monthly_expenses_std": 0.0,
             "detected_salary": 0.0,
+            "salary_bonus_months": (),
+            "salary_bonus_amount": 0.0,
+            "annual_income_estimate": 0.0,
+            "monthly_expenses_history": [],
             "total_tracked_months": 0,
             "total_inflow": 0.0,
             "total_outflow": 0.0,
@@ -269,6 +316,10 @@ def compute_bank_monthly_statistics(
             "monthly_expenses_mean": 0.0,
             "monthly_expenses_std": 0.0,
             "detected_salary": 0.0,
+            "salary_bonus_months": (),
+            "salary_bonus_amount": 0.0,
+            "annual_income_estimate": 0.0,
+            "monthly_expenses_history": [],
             "total_tracked_months": 0,
             "total_inflow": 0.0,
             "total_outflow": 0.0,
@@ -289,9 +340,13 @@ def compute_bank_monthly_statistics(
 
     # Spese ed Entrate
     debits = spending_debits(df).copy()   # esclude investimenti/PAC: sono risparmio, non spesa
-    credits = df[df["amount"] > 0].copy()
+    credits = income_credits(df).copy()   # esclude rimborsi e vendite di investimenti
+    refunds = refund_credits(df)
 
     monthly_deb = debits.groupby("month")["amount"].sum().abs()
+    if not refunds.empty:
+        refund_m = refunds.assign(month=pd.to_datetime(refunds["date"]).dt.to_period("M")).groupby("month")["amount"].sum()
+        monthly_deb = (monthly_deb - refund_m.reindex(monthly_deb.index).fillna(0.0)).clip(lower=0.0)
     monthly_cred = credits.groupby("month")["amount"].sum()
 
     # Cashflow mensile unificato
@@ -317,9 +372,9 @@ def compute_bank_monthly_statistics(
     std_exp = float(trimmed_deb.std()) if len(trimmed_deb) > 1 else 0.0
 
     # Rilevamento Stipendio / Flussi regolari di reddito
-    salary_tx = credits[credits["category"].isin(["Stipendio", "Stipendio & Compensi"])]
-    if not salary_tx.empty:
-        detected_salary = float(salary_tx["amount"].median())
+    salary_profile = detect_salary_profile(df, credits)
+    if salary_profile["base"] > 0:
+        detected_salary = salary_profile["base"]
     else:
         # Fallback a crediti ricorrenti > 1000 o mediana delle entrate mensili effettive
         large_inflows = credits[credits["amount"] >= 1000.0]
@@ -413,6 +468,10 @@ def compute_bank_monthly_statistics(
         "monthly_expenses_mean": round(mean_exp, 2),
         "monthly_expenses_std": round(std_exp, 2),
         "detected_salary": round(detected_salary, 2),
+        "salary_bonus_months": salary_profile["bonus_months"],
+        "salary_bonus_amount": round(salary_profile["bonus_amount"], 2),
+        "annual_income_estimate": round(salary_profile["annual"] or detected_salary * 12, 2),
+        "monthly_expenses_history": [round(float(v), 2) for v in trimmed_deb.sort_index().values],
         "total_tracked_months": len(all_months),
         "total_inflow": round(tot_inflow, 2),
         "total_outflow": round(tot_outflow, 2),

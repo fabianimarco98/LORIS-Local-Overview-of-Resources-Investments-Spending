@@ -22,6 +22,7 @@ from pathlib import Path
 # Orizzonte di default quando non specificato
 DEFAULT_HORIZON_MONTHS = 36
 DEFAULT_TAX_RATE = 0.26
+MIN_BOOTSTRAP_MONTHS = 12      # sotto questa soglia la storia è troppo corta per un bootstrap
 EXTRA_MONTHS = (3, 6, 9, 12)   # solo per macro_df con salary_phase_*_extra (compatibilità)
 
 
@@ -34,6 +35,18 @@ def lognormal_monthly_params(annual_mean: float, annual_std: float) -> Tuple[flo
     gross = max(1.0 + annual_mean, 1e-6)
     s2 = np.log1p((max(annual_std, 0.0) / gross) ** 2)
     return (np.log(gross) - s2 / 2.0) / 12.0, float(np.sqrt(s2 / 12.0))
+
+
+def _rescale_history(hist: np.ndarray, target_mean: Optional[float], target_std: Optional[float]) -> np.ndarray:
+    """Riporta la storia alla media/deviazione richieste (se date), mai sotto zero."""
+    m, s = float(hist.mean()), float(hist.std(ddof=1)) if len(hist) > 1 else 0.0
+    out = hist.copy()
+    if target_std is not None and s > 0:
+        tm = m if target_mean is None else float(target_mean)
+        out = tm + (hist - m) * (float(target_std) / s)
+    elif target_mean is not None and m > 0:
+        out = hist * (float(target_mean) / m)
+    return np.maximum(out, 0.0)
 
 
 def standardized_shocks(rng: np.random.Generator, size: int, tail_df: Optional[float]) -> np.ndarray:
@@ -101,6 +114,8 @@ def run_simulation(
     annual_fee: Optional[float] = None,
     market_tail_df: Optional[float] = None,
     phase2_start: Optional[Union[str, pd.Timestamp]] = None,
+    expense_history: Optional[Union[np.ndarray, List[float]]] = None,
+    bootstrap_block: int = 3,
 ) -> Dict[str, Any]:
     """
     Esegue la simulazione Monte Carlo su N scenari per l'orizzonte temporale specificato.
@@ -111,6 +126,12 @@ def run_simulation(
     annual_fee: costi annui di prodotto (TER) sottratti al rendimento degli investimenti.
     market_tail_df: gradi di libertà della Student-t per i rendimenti (None = log-normale).
     phase2_start: dal quale mese vale `salary2` (None = non esiste una seconda fase).
+    expense_history: spese mensili storiche (mesi completi, in euro di oggi). Con almeno
+        MIN_BOOTSTRAP_MONTHS valori le spese simulate sono un block bootstrap della storia
+        (blocchi di `bootstrap_block` mesi): conserva asimmetria, mesi eccezionali e
+        autocorrelazione, che una normale i.i.d. perde. Se monthly_expenses_mean/std sono dati,
+        la storia viene riscalata per avere esattamente quella media e deviazione standard.
+        Non conserva la posizione nel calendario dei mesi stagionali.
     """
     start_dt = pd.to_datetime(start if start is not None else default_start())
 
@@ -165,7 +186,14 @@ def run_simulation(
 
     # Con volatilità empirica (monthly_expenses_std dagli estratti) lo shock comune è già incluso nella std osservata:
     # applicarlo di nuovo gonfierebbe rischio e probabilità di esaurire la cassa.
-    _empirical_vol = (recurring_df is None or recurring_df.empty) and monthly_expenses_std is not None
+    no_recurring = recurring_df is None or recurring_df.empty
+    hist = None
+    if expense_history is not None and no_recurring:
+        h = np.asarray(expense_history, dtype=float)
+        h = h[np.isfinite(h)]
+        if len(h) >= MIN_BOOTSTRAP_MONTHS:
+            hist = _rescale_history(h, monthly_expenses_mean, monthly_expenses_std)
+    _empirical_vol = no_recurring and (monthly_expenses_std is not None or hist is not None)
     exp_common_std = float(P.get("expense_common_std", 0.0 if _empirical_vol else 0.40) if expense_common_std is None else expense_common_std)
     exp_common_rho = float(P.get("expense_common_rho", 0.45) if expense_common_rho is None else expense_common_rho)
     overdraft_rate = float(P.get("overdraft_rate_annual", 0.10) if overdraft_rate is None else overdraft_rate)
@@ -188,6 +216,13 @@ def run_simulation(
                 shock_by_month[m_idx] = shock_by_month.get(m_idx, 0.0) + float(r["amount"]) * shock_scale
 
     rng = np.random.default_rng(seed)
+    hist_paths = None
+    if hist is not None:
+        block = int(min(max(bootstrap_block, 1), len(hist)))
+        n_blocks = -(-months // block)
+        starts = rng.integers(0, len(hist) - block + 1, size=(n_sims, n_blocks))
+        idx = np.repeat(starts, block, axis=1)[:, :months] + np.tile(np.arange(block), n_blocks)[:months]
+        hist_paths = hist[idx]
     cash = np.full(n_sims, starting_cash, dtype=float)
     invest = np.full(n_sims, starting_inv, dtype=float)
     cost_basis = np.full(n_sims, starting_inv, dtype=float)
@@ -263,6 +298,8 @@ def run_simulation(
                 raw = rng.uniform(r.get("min_cost", 0.0), r.get("max_cost", 0.0), n_sims)
                 mult = price_level if r.get("inflation_type") == "continuous" else year_level
                 exp += raw * mult * occurs
+        elif hist_paths is not None:
+            exp = hist_paths[:, m] * price_level
         else:
             # Calibrazione empirica diretta al 100% da estratti conto
             _mean = monthly_expenses_mean if monthly_expenses_mean is not None else 1300.0

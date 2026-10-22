@@ -62,6 +62,12 @@ ASSET_CLASS_COLORS = {
 INVESTMENT_CATEGORIES = {"Investimento ETF / Azioni", "Investimenti & PAC"}
 INVESTMENT_DESC_REGEX = r"savings plan|sparplan|handel|buy trade"
 
+# Accrediti che NON sono reddito: rimborsi (si sottraggono alla spesa) e vendite di investimenti (patrimonio che cambia forma).
+# "gutschrift" è volutamente escluso: nei conti tedeschi/austriaci compare anche negli accrediti di stipendio.
+REFUND_DESC_REGEX = r"storno|refund|rimborso|erstattung|reversal|chargeback"
+DISINVESTMENT_DESC_REGEX = r"sell trade|verkauf|vendita (?:titoli|etf|azioni|quote)|riscatto|liquidazione (?:fondo|etf)"
+INCOME_PROTECTED_CATEGORIES = {"Stipendio", "Stipendio & Compensi", "Interessi & Rendite"}
+
 
 def spending_debits(df_tx: pd.DataFrame) -> pd.DataFrame:
     """Uscite reali: esclude giroconti interni e acquisti di investimenti/PAC."""
@@ -77,32 +83,77 @@ def spending_debits(df_tx: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _positive_credits(df_tx: pd.DataFrame) -> pd.DataFrame:
+    if df_tx.empty or "amount" not in df_tx.columns:
+        return df_tx.iloc[0:0]
+    out = df_tx[df_tx["amount"] > 0]
+    if "is_internal_transfer" in out.columns:
+        out = out[~out["is_internal_transfer"].fillna(False).astype(bool)]
+    return out
+
+
+def _matches_desc(df: pd.DataFrame, regex: str) -> pd.Series:
+    if df.empty or "description" not in df.columns:
+        return pd.Series(False, index=df.index)
+    hit = df["description"].astype(str).str.lower().str.contains(regex, regex=True, na=False)
+    if "category" in df.columns:
+        hit &= ~df["category"].isin(INCOME_PROTECTED_CATEGORIES)
+    return hit
+
+
+def refund_credits(df_tx: pd.DataFrame) -> pd.DataFrame:
+    """Accrediti che stornano una spesa (rimborsi, storni): non sono reddito, riducono la spesa del mese."""
+    c = _positive_credits(df_tx)
+    return c[_matches_desc(c, REFUND_DESC_REGEX)]
+
+
+def income_credits(df_tx: pd.DataFrame) -> pd.DataFrame:
+    """Entrate reali, simmetriche a `spending_debits`: esclude giroconti, rimborsi e vendite di investimenti."""
+    c = _positive_credits(df_tx)
+    return c[~_matches_desc(c, REFUND_DESC_REGEX) & ~_matches_desc(c, DISINVESTMENT_DESC_REGEX)]
+
+
+def partial_edge_months(df_tx: pd.DataFrame) -> List[pd.Period]:
+    """
+    Con almeno 3 mesi di dati: il primo/ultimo mese se l'estratto non lo copre
+    (primo movimento dopo il giorno 5 o ultimo prima degli ultimi 5 giorni del mese).
+    """
+    if df_tx.empty or "date" not in df_tx.columns:
+        return []
+    dates = pd.to_datetime(df_tx["date"])
+    if dates.dt.to_period("M").nunique() < 3:
+        return []
+    first, last = dates.min(), dates.max()
+    drop = []
+    if first.day > 5:
+        drop.append(first.to_period("M"))
+    if last.day < last.days_in_month - 5:
+        drop.append(last.to_period("M"))
+    return drop
+
+
 def monthly_spending_series(df_tx: pd.DataFrame, trim_partial: bool = True) -> pd.Series:
     """
-    Spesa mensile (valori positivi, indice Period[M]) calcolata con `spending_debits`.
-    Con almeno 3 mesi di dati scarta il primo/ultimo mese se l'estratto non lo copre
-    (primo movimento dopo il giorno 5 o ultimo prima degli ultimi 5 giorni del mese).
-    È l'unica definizione di "spesa mensile" usata da intestazione, buffer e Analytics.
+    Spesa mensile (valori positivi, indice Period[M]) calcolata con `spending_debits`,
+    al netto dei rimborsi dello stesso mese (mai sotto zero). Scarta i mesi parziali ai bordi
+    (vedi `partial_edge_months`). È l'unica definizione di "spesa mensile" usata da
+    intestazione, buffer e Analytics.
     """
     if df_tx.empty or "date" not in df_tx.columns:
         return pd.Series(dtype=float)
-    dates = pd.to_datetime(df_tx["date"])
     spese = spending_debits(df_tx)
     if spese.empty:
         return pd.Series(dtype=float)
     monthly = spese.assign(_m=pd.to_datetime(spese["date"]).dt.to_period("M")).groupby("_m")["amount"].sum().abs()
+    refunds = refund_credits(df_tx)
+    if not refunds.empty:
+        by_month = refunds.assign(_m=pd.to_datetime(refunds["date"]).dt.to_period("M")).groupby("_m")["amount"].sum()
+        monthly = (monthly - by_month.reindex(monthly.index).fillna(0.0)).clip(lower=0.0)
     if trim_partial:
-        first, last = dates.min(), dates.max()
-        months = dates.dt.to_period("M").nunique()
-        if months >= 3:
-            drop = []
-            if first.day > 5:
-                drop.append(first.to_period("M"))
-            if last.day < last.days_in_month - 5:
-                drop.append(last.to_period("M"))
-            trimmed = monthly.drop([m for m in drop if m in monthly.index])
-            if len(trimmed) >= 1:
-                monthly = trimmed
+        drop = partial_edge_months(df_tx)
+        trimmed = monthly.drop([m for m in drop if m in monthly.index])
+        if len(trimmed) >= 1:
+            monthly = trimmed
     return monthly
 
 
