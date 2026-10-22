@@ -24,6 +24,8 @@ class TestPackageForSharing(unittest.TestCase):
         ):
             self.assertFalse(pfs._is_allowed(private), private)
 
+    @unittest.skipUnless((Path(__file__).resolve().parent.parent / ".git").exists(),
+                         "il pacchetto si crea da un clone git (git ls-files)")
     def test_zip_contains_no_personal_input(self):
         with TemporaryDirectory() as tmp:
             out = pfs.create_distribution_package(Path(tmp) / "x.zip")
