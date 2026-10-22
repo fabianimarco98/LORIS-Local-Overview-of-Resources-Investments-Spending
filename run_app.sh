@@ -19,7 +19,7 @@ elif [ -f "/opt/homebrew/Caskroom/miniforge/base/envs/previsione_spese/bin/pytho
     STREAMLIT_EXEC="/opt/homebrew/Caskroom/miniforge/base/envs/previsione_spese/bin/streamlit"
 else
     # Verifica se python3 ha già le dipendenze
-    if ! python3 -c "import streamlit, pandas, plotly" >/dev/null 2>&1; then
+    if ! python3 -c "import streamlit, pandas, plotly, pdfplumber, pypdf, openpyxl, fastapi" >/dev/null 2>&1; then
         echo "🔧 Primo avvio rilevato: installazione dipendenze in corso..."
         if ! command -v python3 >/dev/null 2>&1; then
             echo "❌ Python 3 non trovato. Installa Python da https://www.python.org/"

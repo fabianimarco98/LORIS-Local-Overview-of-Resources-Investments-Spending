@@ -1,6 +1,6 @@
 # 🐾 LORIS — Local Overview of Resources, Investments & Spending
 
-[![Tests](https://img.shields.io/badge/Tests-66%2F66%20Passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-266%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20Desktop%20%7C%20Web-blue)]()
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Local%20%7C%20Zero--Knowledge-success)]()
 [![Languages](https://img.shields.io/badge/Languages-Italiano%20%7C%20English-orange)]()

@@ -66,6 +66,7 @@ Per ottenere i dati da dare a LORIS, esporta i file ufficiali dalle tue banche:
 • 🪟 SU WINDOWS:
   1. Assicurati di avere Python 3.10 o successivo installato (scaricalo da https://www.python.org/downloads/
      ricordandoti di spuntare la casella "Add Python to PATH" durante l'installazione).
+     Il primo avvio scarica le librerie (alcuni minuti, serve internet solo quella volta).
   2. Estrai la cartella LORIS.
   3. Fai semplicemente DOPPIO CLIC sul file:
      👉 start.bat
@@ -95,6 +96,31 @@ B) TRAMITE CARTELLA DEL COMPUTER:
    - Se hai il CSV esportato da Wallet (BudgetBakers):
      `input/wallet/`
    - Nella dashboard clicca su "Ricarica Dati".
+
+======================================================================
+3b. IMPOSTAZIONI OPZIONALI E COSA ASPETTARSI
+======================================================================
+
+• 🌍 PAESE FISCALE (importante per le previsioni):
+  Le previsioni calcolano le imposte su interessi e plusvalenze. Se non indichi il paese,
+  LORIS usa le aliquote italiane (26% + bollo) e lo segnala. Per l'Austria (27,5%) crea il
+  file `input/user_profile.json` con questo contenuto:
+     {"tax_country": "AT"}
+  Nello stesso file puoi aggiungere il tuo nome e il datore di lavoro per riconoscere meglio
+  stipendi e giroconti: {"owner_names": ["mario rossi"], "employer_keywords": ["acme gmbh"]}
+  Il file resta sul tuo computer e non viene mai incluso nei pacchetti da condividere.
+
+• 📈 PATRIMONIO NEL TEMPO: nella scheda dedicata puoi registrare ogni ~3 mesi il valore di
+  conti, broker, contanti, immobili. Funziona anche senza estratti conto.
+
+• 📄 PDF: LORIS legge il saldo iniziale e finale e verifica che quadrino con i movimenti.
+  Se un PDF è scansionato (solo immagine) o protetto da password non può essere letto:
+  scarica l'originale dalla banca oppure inserisci il saldo a mano. Ogni anomalia compare
+  come avviso nella dashboard: leggili, non vengono mai nascosti.
+
+• 🎲 PREVISIONI: più estratti carichi (meglio 12 mesi o più), più sono affidabili. Con meno di
+  12 mesi la variabilità delle spese è stimata in modo più grezzo. Sono ipotesi di scenario,
+  non consigli finanziari.
 
 ======================================================================
 4. MODIFICHE MANUALI & FUNZIONE UNDO (MASSIMO CONTROLLO)
