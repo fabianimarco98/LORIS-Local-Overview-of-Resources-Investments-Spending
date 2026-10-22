@@ -356,6 +356,8 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
             cash_rate_pct=ctx.cash_rate_pct,
         )
         prm = res["params"]
+        from forecast_analysis import risk_metrics
+        risk = risk_metrics(res)
         return {
             "assumptions": {
                 "start": str(res["start"])[:10], "horizon_months": res["months"], "n_sims": n_sims,
@@ -370,6 +372,10 @@ def build_portfolio_registry(ctx: PortfolioContext) -> ToolRegistry:
             "net_worth_p95_optimistic": res["p95"],
             "net_worth_p50_in_today_euros": res["p50_real"],
             "probability_of_running_out_of_cash_pct": res["prob_ruin"],
+            "probability_margin_of_error_pct_95": round(1.96 * res["prob_ruin_se"], 2),
+            "expected_shortfall_5pct": risk["es5"],
+            "max_drawdown_median_pct": risk["max_drawdown_median_pct"],
+            "tax_country": prm["tax_country"],
         }
 
     def net_worth_history() -> Dict[str, Any]:

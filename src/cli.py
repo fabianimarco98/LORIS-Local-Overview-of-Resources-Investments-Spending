@@ -13,6 +13,7 @@ from banking.anonymizer import PIIScrubber
 from banking.local_llm import LocalLLMClient, RECOMMENDED_MODELS
 from banking.portfolio import ASSET_CLASS_LABELS, get_asset_class_label
 import bank_data_manager as bdm
+import forecast_analysis as fa
 import loris_service as svc
 import simulation_engine as se
 from i18n import t, get_category_translation
@@ -173,7 +174,13 @@ def cmd_simulate(args):
     print(f"  • {t('median_p50', lang):42}: € {res['p50']:10,.2f}")
     print(f"  • 75° Percentile:                           € {res['p75']:10,.2f}")
     print(f"  • {t('optimistic_p95', lang):42}: € {res['p95']:10,.2f}")
-    print(f"  • {t('ruin_probability', lang):42}:   {res['prob_ruin']:5.1f}%")
+    print(f"  • {t('ruin_probability', lang):42}:   {res['prob_ruin']:5.1f}% (±{1.96 * res['prob_ruin_se']:.1f})")
+    risk = fa.risk_metrics(res)
+    print(f"  • {'Expected Shortfall 5%':42}: € {risk['es5']:10,.2f}")
+    print(f"  • {'Drawdown max (mediana)' if lang == 'it' else 'Max drawdown (median)':42}:   {risk['max_drawdown_median_pct']:5.1f}%")
+    if res["params"]["tax_country_assumed"]:
+        print("  ℹ️  " + ("Paese fiscale non indicato: aliquote italiane (imposta tax_country in input/user_profile.json)."
+                          if lang == "it" else "Tax country not set: Italian rates (set tax_country in input/user_profile.json)."))
     print(f"  • {t('real_vs_nominal', lang):42}: € {res['p50_real']:10,.2f}")
     print("=" * 70)
 

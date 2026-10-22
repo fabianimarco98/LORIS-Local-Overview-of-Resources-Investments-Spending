@@ -14,6 +14,7 @@ from banking.anonymizer import PIIScrubber
 from banking.local_llm import LocalLLMClient, RECOMMENDED_MODELS
 from banking.parsers import parse_bank_statement
 import bank_data_manager as bdm
+import forecast_analysis as fa
 import loris_service as svc
 import simulation_engine as se
 
@@ -51,6 +52,8 @@ class SimulationRequest(BaseModel):
     annual_inflation_pct: Optional[float] = Field(None, ge=0, le=20)
     annual_fee_pct: Optional[float] = Field(None, ge=0, le=5)
     wage_growth_pct: Optional[float] = Field(None, ge=-10, le=20)
+    goal_amount: Optional[float] = Field(None, gt=0)
+    goal_months: Optional[int] = Field(None, ge=1)
 
 
 class LLMQueryRequest(BaseModel):
@@ -180,21 +183,23 @@ def run_simulation(req: SimulationRequest):
         wage_growth_pct=req.wage_growth_pct,
     )
 
-    tot_wealth = res["cash_history"] + res["invest_history"]
-    terminal_wealth = tot_wealth[:, -1]
+    risk = fa.risk_metrics(res, goal_amount=req.goal_amount, goal_month=req.goal_months)
+    risk.pop("ruin_by_month")
 
     return {
         "n_sims": req.n_sims,
         "months": len(res["dates"]),
         "dates": [d.strftime("%Y-%m-%d") for d in res["dates"]],
+        # patrimonio finale al netto delle imposte latenti, come in dashboard, CLI e agente
         "terminal_net_worth": {
-            "p05": float(round(pd.Series(terminal_wealth).quantile(0.05), 2)),
-            "p25": float(round(pd.Series(terminal_wealth).quantile(0.25), 2)),
-            "median": float(round(pd.Series(terminal_wealth).median(), 2)),
-            "p75": float(round(pd.Series(terminal_wealth).quantile(0.75), 2)),
-            "p95": float(round(pd.Series(terminal_wealth).quantile(0.95), 2)),
+            "p05": round(res["p5"], 2), "p25": round(res["p25"], 2), "median": round(res["p50"], 2),
+            "p75": round(res["p75"], 2), "p95": round(res["p95"], 2),
         },
-        "insolvency_risk_pct": float(round((res["cash_history"] < 0).any(axis=1).mean() * 100, 2)),
+        "insolvency_risk_pct": round(res["prob_ruin"], 2),
+        "insolvency_risk_se_pct": round(res["prob_ruin_se"], 2),
+        "risk": risk,
+        "tax": {"country": res["params"]["tax_country"], "assumed": res["params"]["tax_country_assumed"],
+                "capital_gains_rate": res["params"]["tax_rate"]},
     }
 
 

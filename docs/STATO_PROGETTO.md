@@ -76,6 +76,27 @@ Limiti noti: nessun OCR (le scansioni vanno sostituite con l'originale della ban
 
 ---
 
+## 🎲 Modello di previsione: ipotesi e limiti
+
+Codice: [simulation_engine.py](../src/simulation_engine.py) (motore), [loris_service.py](../src/loris_service.py) (calibrazione sui dati reali), [forecast_analysis.py](../src/forecast_analysis.py) (rischio, stress, sensitività), [banking/tax.py](../src/banking/tax.py) (imposte).
+
+| Elemento | Come è modellato |
+| :--- | :--- |
+| Rendimenti di mercato | Log-normali (opzione Student-t): il rendimento annuo atteso è esattamente quello impostato e la volatilità (default 15%) è configurabile. Costi di prodotto (TER, default 0,2%) sottratti |
+| Inflazione | Casuale **per scenario**: ogni scenario ha il proprio livello dei prezzi, e il patrimonio "reale" è deflazionato con quello |
+| Reddito | Mediana dei **totali mensili** di stipendio (uno stipendio in due bonifici non viene dimezzato); con 12 mesi completi si rilevano 13ª/14ª e bonus (mese > 1,5 × l'ordinario). Cresce una volta l'anno come l'inflazione, salvo diversa impostazione (`wage_growth_pct`) |
+| Entrate nelle statistiche | Escludono giroconti, rimborsi e vendite di investimenti. I rimborsi riducono la spesa del mese |
+| Spese | Con almeno 12 mesi di storico: block bootstrap (blocchi di 3 mesi) dei mesi reali, riscalati alla media/deviazione indicate. Conserva asimmetria e mesi eccezionali, **non** la posizione nel calendario (stagionalità). Sotto i 12 mesi: normale con media e deviazione degli estratti |
+| Imposte | Paese da `tax_country` in `input/user_profile.json` (IT: 26% + bollo 0,2% sui titoli e 34,20 € sul conto oltre 5.000 €; AT: KESt 27,5%). Senza indicazione si usa l'Italia e lo si segnala |
+| Rischio | Expected Shortfall 5%, mesi alla cassa negativa, drawdown massimo, probabilità di raggiungere un obiettivo, errore Monte Carlo sulle probabilità |
+| Fondo di emergenza | Autonomia sulle sole spese essenziali; cassa consigliata = 95° percentile della spesa cumulata dei primi 6 mesi simulati |
+| Stress test | 2008, Covid 2020, inflazione 2022, 6 mesi senza reddito, crisi + senza reddito: percorsi stilizzati applicati al modello calibrato (stessi numeri casuali del caso base). Chi versa ogni mese compra anche durante il crollo, quindi si leggono minimo e drawdown, non solo il valore finale |
+| Sensitività | Tornado ricavato dai valori effettivi (±10% reddito/spese, ±2 pt rendimento, ±5 pt volatilità, ecc.) |
+
+Limiti noti: nessuna correlazione tra mercato e inflazione; versamenti e cassa non reagiscono ai crolli (nessuna regola di ribilanciamento); titoli di Stato (IT 12,5%), compensazione delle minusvalenze e valute diverse da EUR non modellati; i parametri di mercato sono ipotesi, non previsioni.
+
+---
+
 ## 📈 Tab della Dashboard Web Bilingue (`app_streamlit.py`)
 
 1. **🏦 Patrimonio & Saldi / Net Worth & Accounts**: Saldi consolidati per banca/broker, Donut Chart Asset Allocation e conti tracciati.
@@ -90,7 +111,7 @@ Limiti noti: nessun OCR (le scansioni vanno sostituite con l'originale della ban
 
 ## 🧪 Validazione & Stress Test Suite (`tests/test_stress.py`)
 
-La suite di test completa comprende **212 test** (`python -m unittest discover tests`), di cui 16 stress test ad alto carico in `tests/test_stress.py`; 3 test API vengono saltati se `fastapi` non è installato. Tutti i test eseguiti sono superati. Tabella degli stress test:
+La suite di test completa comprende **266 test** (`python -m unittest discover tests`), di cui 16 stress test ad alto carico in `tests/test_stress.py`; 3 test API vengono saltati se `fastapi` non è installato. Tutti i test eseguiti sono superati. Tabella degli stress test:
 
 | Ambito di Stress Test | Condizioni di Carico & Scenari Limite | Tempo & Prestazioni | Esito |
 | :--- | :--- | :--- | :--- |

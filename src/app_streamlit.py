@@ -18,6 +18,7 @@ from agents.runtime import AgentBackendError
 from banking.local_llm import LocalLLMClient, RECOMMENDED_MODELS
 from banking.portfolio import PortfolioAggregator, PortfolioSummary, ASSET_CLASS_LABELS, ASSET_CLASS_COLORS, get_asset_class_label
 import bank_data_manager as bdm
+import forecast_analysis as fa
 import loris_service as svc
 import simulation_engine as se
 from i18n import t, get_category_translation, AVAILABLE_LANGUAGES
@@ -1222,8 +1223,8 @@ with tab_sim:
 
     # Esecuzione simulazione Monte Carlo generalizzata
     current_cash_rate = float(st.session_state.get("custom_cash_rate", 2.5)) / 100.0
-    sim_res = svc.run_forecast(
-        svc.build_portfolio_data(statements, summary),
+    forecast_data = svc.build_portfolio_data(statements, summary)
+    forecast_params = dict(
         horizon_months=horizon_sel,
         n_sims=sim_paths,
         monthly_investment=user_pac,
@@ -1237,6 +1238,13 @@ with tab_sim:
         monthly_expenses_mean=user_burn,
         monthly_expenses_std=user_vol,
     )
+    sim_res = svc.run_forecast(forecast_data, **forecast_params)
+    if sim_res["params"]["tax_country_assumed"]:
+        st.caption(
+            "ℹ️ Paese fiscale non indicato: uso le aliquote italiane. Imposta \"tax_country\" (es. \"AT\") in input/user_profile.json."
+            if lang == "it" else
+            "ℹ️ Tax country not set: using Italian rates. Set \"tax_country\" (e.g. \"AT\") in input/user_profile.json."
+        )
 
     # Indicatori Risultati
     st.markdown(f"### 📈 {t('projection_results', lang)}")
@@ -1248,7 +1256,10 @@ with tab_sim:
     with col_r3:
         st.metric(t("optimistic_p95", lang), f"€ {sim_res['p95']:,.0f}")
     with col_r4:
-        st.metric(t("ruin_probability", lang), f"{sim_res['prob_ruin']:.1f}%")
+        st.metric(t("ruin_probability", lang), f"{sim_res['prob_ruin']:.1f}%",
+                  help=(f"Errore Monte Carlo ±{1.96 * sim_res['prob_ruin_se']:.1f} punti (95%). Differenze più piccole non sono significative."
+                        if lang == "it" else
+                        f"Monte Carlo error ±{1.96 * sim_res['prob_ruin_se']:.1f} points (95%). Smaller differences are not significant."))
     with col_r5:
         st.metric(t("real_vs_nominal", lang), f"€ {sim_res['p50_real']:,.0f}")
 
@@ -1301,6 +1312,84 @@ with tab_sim:
         fig_i.add_trace(go.Scatter(x=months_axis, y=inv_med, mode="lines", line=dict(color="#f59e0b", width=2), name="Investments"))
         fig_i.update_layout(title="Crescita Portafoglio Investito" if lang == "it" else "Invested Portfolio Growth", yaxis_title="€", margin=dict(t=40, b=10, l=10, r=10))
         st.plotly_chart(fig_i, use_container_width=True)
+
+    # Rischio, obiettivo e fondo di emergenza
+    it = lang == "it"
+    st.markdown(f"### 🛡️ {'Rischio' if it else 'Risk'}")
+    goal_col1, goal_col2 = st.columns(2)
+    with goal_col1:
+        goal_amount = st.number_input("Obiettivo di patrimonio (€, 0 = nessuno):" if it else "Wealth goal (€, 0 = none):",
+                                      min_value=0.0, value=0.0, step=5000.0)
+    with goal_col2:
+        goal_month = st.slider("Entro il mese:" if it else "By month:", 1, int(horizon_sel), int(horizon_sel))
+    risk = fa.risk_metrics(sim_res, goal_amount=goal_amount or None, goal_month=goal_month)
+    rk1, rk2, rk3, rk4 = st.columns(4)
+    with rk1:
+        st.metric("Expected Shortfall 5%", f"€ {risk['es5']:,.0f}",
+                  help=("Patrimonio medio finale nel 5% degli scenari peggiori." if it else
+                        "Average final wealth in the worst 5% of scenarios."))
+    with rk2:
+        st.metric("Drawdown max (mediana)" if it else "Max drawdown (median)", f"{risk['max_drawdown_median_pct']:.1f}%",
+                  help=(f"Nel 5% dei casi peggiori la perdita dal picco supera {risk['max_drawdown_p95_pct']:.1f}%." if it else
+                        f"In the worst 5% of cases the loss from peak exceeds {risk['max_drawdown_p95_pct']:.1f}%."))
+    with rk3:
+        mtr = risk["median_months_to_ruin"]
+        st.metric("Mesi a cassa negativa" if it else "Months to negative cash", "—" if mtr is None else f"{mtr:.0f}",
+                  help=("Mediana, solo negli scenari in cui la cassa si esaurisce." if it else
+                        "Median, only in scenarios where cash runs out."))
+    with rk4:
+        if "goal" in risk:
+            g = risk["goal"]
+            st.metric("Probabilità obiettivo" if it else "Goal probability", f"{g['prob_at_month_pct']:.0f}%",
+                      help=(f"Almeno una volta entro il mese {g['month']}: {g['prob_ever_pct']:.0f}% (±{1.96 * g['prob_at_month_se_pct']:.1f})."
+                            if it else f"At least once by month {g['month']}: {g['prob_ever_pct']:.0f}% (±{1.96 * g['prob_at_month_se_pct']:.1f})."))
+        else:
+            st.metric("Probabilità obiettivo" if it else "Goal probability", "—")
+
+    ef = fa.emergency_fund(forecast_data, sim_res)
+    st.markdown(f"#### {'Fondo di emergenza' if it else 'Emergency fund'}")
+    ef1, ef2, ef3 = st.columns(3)
+    with ef1:
+        st.metric("Autonomia (solo spese essenziali)" if it else "Runway (essential spending only)",
+                  "—" if ef["runway_months_essential"] is None else f"{ef['runway_months_essential']:.1f} " + ("mesi" if it else "months"),
+                  help=(f"Essenziali: € {ef['essential_monthly']:,.0f}/mese (affitto, utenze, alimentari, salute, trasporti)." if it else
+                        f"Essentials: € {ef['essential_monthly']:,.0f}/month (rent, utilities, groceries, health, transport)."))
+    with ef2:
+        st.metric(f"Cassa consigliata ({ef['window_months']} mesi, 95° perc.)" if it else f"Recommended cash ({ef['window_months']} months, 95th pct)",
+                  f"€ {ef['recommended_cash_p95']:,.0f}",
+                  help=("Copre la spesa cumulata dei primi mesi anche nel 95% dei casi, non solo in media." if it else
+                        "Covers cumulative spending of the first months in 95% of cases, not just on average."))
+    with ef3:
+        st.metric("Mancano" if it else "Shortfall", f"€ {ef['gap']:,.0f}")
+
+    # Stress test e sensitività: più simulazioni, quindi solo su richiesta
+    with st.expander(f"🧪 {'Stress test e sensitività' if it else 'Stress tests and sensitivity'}"):
+        st.caption("Scenari storici stilizzati applicati ai tuoi dati. Chi versa ogni mese compra anche durante il crollo: guarda minimo e drawdown, non solo il valore finale."
+                   if it else
+                   "Stylised historical scenarios applied to your data. Monthly savers also buy during the crash: look at the trough and drawdown, not only the final value.")
+        if st.button("Calcola stress test e sensitività" if it else "Run stress tests and sensitivity", key="run_stress_tornado"):
+            with st.spinner("..."):
+                stress_df = fa.run_stress_tests(forecast_data, **{**forecast_params, "n_sims": min(sim_paths, 2000)})
+                tornado_df, tornado_base = fa.run_tornado(forecast_data, **forecast_params)
+            st.session_state["stress_df"], st.session_state["tornado"] = stress_df, (tornado_df, tornado_base)
+        if "stress_df" in st.session_state:
+            sdf = st.session_state["stress_df"]
+            label_col = "label_it" if it else "label_en"
+            st.dataframe(
+                sdf.assign(Scenario=sdf[label_col])[["Scenario", "p5", "p50", "delta_p50", "trough_p50", "max_drawdown_median_pct", "prob_ruin"]]
+                .rename(columns={"p5": "P5", "p50": "P50", "delta_p50": "Δ P50", "trough_p50": "Minimo" if it else "Trough",
+                                 "max_drawdown_median_pct": "Drawdown %", "prob_ruin": "Prob. cassa<0 %" if it else "Cash<0 prob. %"})
+                .round(0),
+                use_container_width=True, hide_index=True)
+            tdf, tbase = st.session_state["tornado"]
+            if not tdf.empty:
+                fig_t = go.Figure()
+                fig_t.add_trace(go.Bar(y=tdf["parametro"], x=tdf["delta_low"], orientation="h", name="↓", marker_color="#ef4444"))
+                fig_t.add_trace(go.Bar(y=tdf["parametro"], x=tdf["delta_high"], orientation="h", name="↑", marker_color="#10b981"))
+                fig_t.update_layout(barmode="overlay", yaxis=dict(autorange="reversed"), margin=dict(t=30, b=10, l=10, r=10),
+                                    title=(f"Effetto sulla mediana finale (base € {tbase:,.0f})" if it else f"Effect on final median (base € {tbase:,.0f})"),
+                                    xaxis_title="Δ €")
+                st.plotly_chart(fig_t, use_container_width=True)
 
 
 # ------------------------------------------------------------
