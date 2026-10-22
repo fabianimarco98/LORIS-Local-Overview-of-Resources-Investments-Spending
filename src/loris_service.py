@@ -16,6 +16,7 @@ import pandas as pd
 import bank_data_manager as bdm
 import simulation_engine as se
 from banking import net_worth as nw
+from banking.tax import tax_country_assumed, tax_regime
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STATEMENTS_DIR = PROJECT_ROOT / "input" / "bank_statements"
@@ -33,8 +34,7 @@ FORECAST_DEFAULTS: Dict[str, Any] = {
     "cash_rate_pct": 2.5,
     "strategy": "dynamic",
     "cash_threshold": 5000.0,
-    "tax_rate": 0.26,
-}
+}   # tax_rate: dal regime fiscale del paese (user_profile "tax_country"); si può forzare passando tax_rate
 
 
 @dataclass
@@ -112,6 +112,10 @@ def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:
     e market_tail_df (Student-t con quei gradi di libertà al posto della log-normale).
     """
     p = {**FORECAST_DEFAULTS, **{k: v for k, v in params.items() if v is not None}}
+    regime = tax_regime(p.get("tax_country"))
+    p["tax_rate"] = float(p.get("tax_rate", regime.capital_gains))
+    p["tax_country"] = regime.country
+    p["tax_country_assumed"] = tax_country_assumed(params.get("tax_country"))
     stats, summary = data.stats, data.summary
     income_overridden = "monthly_income" in params and params["monthly_income"] is not None
     bonus = {} if income_overridden else {
@@ -138,7 +142,11 @@ def run_forecast(data: PortfolioData, **params: Any) -> Dict[str, Any]:
         infl_mean=float(p["annual_inflation_pct"]) / 100.0,
         monthly_expenses_mean=float(p.get("monthly_expenses_mean", stats.get("monthly_expenses_mean", 0.0))),
         monthly_expenses_std=float(p.get("monthly_expenses_std", stats.get("monthly_expenses_std", 0.0))),
-        tax_rate=float(p["tax_rate"]),
+        tax_rate=p["tax_rate"],
+        cash_tax_rate=regime.interest,
+        securities_stamp=regime.securities_stamp_pct,
+        account_stamp_eur=regime.account_stamp_eur,
+        account_stamp_threshold=regime.account_stamp_threshold,
         shock_scale=float(p.get("shock_scale", 1.0)),
         recurring_df=None,
         shocks_df=None,

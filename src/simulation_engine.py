@@ -21,7 +21,7 @@ from pathlib import Path
 
 # Orizzonte di default quando non specificato
 DEFAULT_HORIZON_MONTHS = 36
-DEFAULT_TAX_RATE = 0.26
+DEFAULT_TAX_RATE = 0.26        # solo ripiego del motore; il servizio usa il regime del paese (banking/tax.py)
 MIN_BOOTSTRAP_MONTHS = 12      # sotto questa soglia la storia è troppo corta per un bootstrap
 EXTRA_MONTHS = (3, 6, 9, 12)   # solo per macro_df con salary_phase_*_extra (compatibilità)
 
@@ -114,6 +114,10 @@ def run_simulation(
     annual_fee: Optional[float] = None,
     market_tail_df: Optional[float] = None,
     phase2_start: Optional[Union[str, pd.Timestamp]] = None,
+    cash_tax_rate: Optional[float] = None,
+    securities_stamp: float = 0.0,
+    account_stamp_eur: float = 0.0,
+    account_stamp_threshold: float = 0.0,
     expense_history: Optional[Union[np.ndarray, List[float]]] = None,
     bootstrap_block: int = 3,
 ) -> Dict[str, Any]:
@@ -124,6 +128,9 @@ def run_simulation(
     wage_growth: crescita annua del reddito (aumento una volta l'anno); default = inflazione attesa,
         cioè potere d'acquisto del reddito costante. 0 = reddito nominale fisso.
     annual_fee: costi annui di prodotto (TER) sottratti al rendimento degli investimenti.
+    tax_rate: aliquota sulle plusvalenze; cash_tax_rate: aliquota sugli interessi (default = tax_rate).
+    securities_stamp: imposta di bollo annua sul valore dei titoli; account_stamp_eur: bollo fisso annuo
+        sulla liquidità quando il saldo supera account_stamp_threshold (addebitato a rate mensili).
     market_tail_df: gradi di libertà della Student-t per i rendimenti (None = log-normale).
     phase2_start: dal quale mese vale `salary2` (None = non esiste una seconda fase).
     expense_history: spese mensili storiche (mesi completi, in euro di oggi). Con almeno
@@ -180,7 +187,9 @@ def run_simulation(
     eff_tax_rate = float(P.get("capital_gains_tax", DEFAULT_TAX_RATE) if tax_rate is None else tax_rate)
     wage_growth = infl_mean if wage_growth is None else float(wage_growth)
     annual_fee = float(P.get("annual_fee", 0.0) if annual_fee is None else annual_fee)
-    fee_factor_m = (1.0 - annual_fee) ** (1 / 12)
+    cash_tax = eff_tax_rate if cash_tax_rate is None else float(cash_tax_rate)
+    fee_factor_m = ((1.0 - annual_fee) * (1.0 - securities_stamp)) ** (1 / 12)
+    stamp_m = float(account_stamp_eur) / 12.0
     phase2_dt = pd.to_datetime(phase2_start) if phase2_start is not None else None
     mu_log_m, sd_log_m = lognormal_monthly_params(mkt_mean, mkt_std)
 
@@ -199,7 +208,7 @@ def run_simulation(
     overdraft_rate = float(P.get("overdraft_rate_annual", 0.10) if overdraft_rate is None else overdraft_rate)
 
     innov_std = exp_common_std * np.sqrt(max(0.0, 1 - exp_common_rho ** 2))
-    cash_rate_m = (1 + cash_rate * (1 - eff_tax_rate)) ** (1 / 12) - 1
+    cash_rate_m = (1 + cash_rate * (1 - cash_tax)) ** (1 / 12) - 1
     overdraft_rate_m = (1 + overdraft_rate) ** (1 / 12) - 1
 
     # Preparazione spese ricorrenti
@@ -263,6 +272,8 @@ def run_simulation(
         # 3. Interessi di cassa / scoperto
         interest = np.where(cash >= 0, cash * cash_rate_m, cash * overdraft_rate_m)
         cash = cash + interest
+        if stamp_m:
+            cash = cash - np.where(cash > account_stamp_threshold, stamp_m, 0.0)
         int_h[:, m] = interest
 
         # 4. Entrate del mese

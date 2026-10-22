@@ -10,7 +10,8 @@ Esempio:
 {
   "owner_names": ["mario rossi"],
   "employer_keywords": ["acme gmbh"],
-  "category_keywords": {"Affitto": ["musterstrasse"]}
+  "category_keywords": {"Affitto": ["musterstrasse"]},
+  "tax_country": "IT"
 }
 """
 
